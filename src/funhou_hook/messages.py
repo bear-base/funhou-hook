@@ -51,3 +51,6 @@ class ApprovalMessage:
     reason: str
     await_response: bool = True
     type: MessageType = "approval"
+
+
+FunhouMessage = LogMessage | SummaryMessage | ApprovalMessage

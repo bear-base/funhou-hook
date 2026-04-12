@@ -1,0 +1,22 @@
+[[rules]]
+match = "Read|Glob|Grep"
+level = "info"
+
+[[rules]]
+match = "Edit(*.env*)"
+level = "danger"
+
+[[rules]]
+match = "Bash(*deploy*|*migrate*)"
+level = "danger"
+
+[[rules]]
+match = "Bash(*test*|*lint*)"
+level = "info"
+
+[defaults]
+level = "warning"
+
+[channels.terminal]
+output = "/tmp/funhou.log"
+levels = ["info", "warning", "danger"]
