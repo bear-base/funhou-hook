@@ -1,4 +1,4 @@
-"""Phase 1 PreToolUse hook entrypoint."""
+"""Phase 1 hook entrypoint for Claude Code events."""
 
 from __future__ import annotations
 
@@ -10,27 +10,18 @@ from typing import Any
 from .classifier import ToolEvent, classify_event
 from .config import load_config
 from .dispatcher import dispatch_message
-from .messages import LogMessage, utc_now
+from .messages import ApprovalMessage, FunhouMessage, LogMessage, utc_now
 
 
 def main() -> int:
     """Read a hook payload from stdin, classify it, and append one log line."""
 
     payload = _read_payload(sys.stdin.read())
-    event = _extract_tool_event(payload)
     config = load_config(_resolve_config_path())
-    level = classify_event(event, config)
-
-    message = LogMessage(
-        timestamp=utc_now(),
-        level=level,
-        tool=event.tool_name,
-        target=event.target,
-        message=_describe_event(event),
-    )
+    message = _build_message(payload, config)
     dispatch_message(message, config.terminal)
 
-    sys.stdout.write(json.dumps({"level": level, "tool": event.tool_name}) + "\n")
+    sys.stdout.write(json.dumps(_build_response(message, payload), ensure_ascii=False) + "\n")
     return 0
 
 
@@ -48,6 +39,73 @@ def _read_payload(raw: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("Hook stdin must be a JSON object.")
     return payload
+
+
+def _build_message(payload: dict[str, Any], config: Any) -> FunhouMessage:
+    event_name = str(payload.get("hook_event_name") or "PreToolUse")
+    if event_name == "Notification":
+        return _build_notification_message(payload, config)
+    return _build_tool_message(payload, config)
+
+
+def _build_tool_message(payload: dict[str, Any], config: Any) -> LogMessage:
+    event = _extract_tool_event(payload)
+    level = classify_event(event, config)
+    return LogMessage(
+        timestamp=utc_now(),
+        level=level,
+        tool=event.tool_name,
+        target=event.target,
+        message=_describe_event(event),
+    )
+
+
+def _build_notification_message(payload: dict[str, Any], config: Any) -> FunhouMessage:
+    notification_type = str(payload.get("notification_type") or "notification")
+    title = str(payload.get("title") or "Notification")
+    message = str(payload.get("message") or notification_type)
+
+    event = ToolEvent(
+        tool_name="Notification",
+        target=notification_type,
+        payload=payload,
+    )
+    level = classify_event(event, config)
+
+    if notification_type == "permission_prompt":
+        return ApprovalMessage(
+            timestamp=utc_now(),
+            level="danger",
+            tool="Notification",
+            command=title,
+            reason=message,
+        )
+
+    return LogMessage(
+        timestamp=utc_now(),
+        level=level,
+        tool="Notification",
+        target=notification_type,
+        message=f"{title}: {message}",
+    )
+
+
+def _build_response(message: FunhouMessage, payload: dict[str, Any]) -> dict[str, str]:
+    event_name = str(payload.get("hook_event_name") or "PreToolUse")
+    if isinstance(message, ApprovalMessage):
+        return {
+            "event": event_name,
+            "level": message.level,
+            "tool": message.tool,
+            "target": message.command,
+        }
+
+    return {
+        "event": event_name,
+        "level": message.level,
+        "tool": message.tool,
+        "target": message.target,
+    }
 
 
 def _extract_tool_event(payload: dict[str, Any]) -> ToolEvent:

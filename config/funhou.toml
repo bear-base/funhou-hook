@@ -3,6 +3,14 @@ match = "Read|Glob|Grep"
 level = "info"
 
 [[rules]]
+match = "Notification(idle_prompt)"
+level = "warning"
+
+[[rules]]
+match = "Notification(permission_prompt)"
+level = "danger"
+
+[[rules]]
 match = "Edit(*.env*)"
 level = "danger"
 
