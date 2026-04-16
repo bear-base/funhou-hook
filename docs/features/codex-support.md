@@ -1,4 +1,4 @@
-﻿# Codex Support Considerations
+# Codex Support Considerations
 
 ## 目的
 

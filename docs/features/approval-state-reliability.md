@@ -1,4 +1,4 @@
-﻿# Approval State Reliability
+# Approval State Reliability
 
 ## 背景
 

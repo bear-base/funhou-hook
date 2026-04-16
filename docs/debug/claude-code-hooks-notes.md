@@ -1,4 +1,4 @@
-﻿# Claude Code Hooks Debug Notes
+# Claude Code Hooks Debug Notes
 
 ## 目的
 
