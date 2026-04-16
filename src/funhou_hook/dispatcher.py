@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from codecs import BOM_UTF8
 from pathlib import Path
 
 from .config import ChannelConfig
@@ -20,5 +21,12 @@ def dispatch_message(message: FunhouMessage, channel: ChannelConfig) -> None:
 
 def _append_line(path: Path, line: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(f"{line}\n")
+    payload = f"{line}\n".encode("utf-8")
+    if not path.exists() or path.stat().st_size == 0:
+        with path.open("wb") as handle:
+            handle.write(BOM_UTF8)
+            handle.write(payload)
+        return
+
+    with path.open("ab") as handle:
+        handle.write(payload)
