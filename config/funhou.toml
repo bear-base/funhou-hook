@@ -27,4 +27,4 @@ level = "warning"
 
 [channels.terminal]
 output = "/tmp/funhou.log"
-levels = ["info", "warning", "danger"]
+levels = ["info", "warning", "danger", "error"]

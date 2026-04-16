@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
 
-Level = Literal["info", "warning", "danger"]
+Level = Literal["info", "warning", "danger", "error"]
 MessageType = Literal["log", "summary", "approval"]
 
 

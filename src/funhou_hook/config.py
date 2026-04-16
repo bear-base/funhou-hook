@@ -12,7 +12,7 @@ from .messages import Level
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = PACKAGE_ROOT / "config" / "funhou.toml"
 DEFAULT_LOG_PATH = Path("/tmp/funhou.log")
-DEFAULT_LEVELS = ("info", "warning", "danger")
+DEFAULT_LEVELS = ("info", "warning", "danger", "error")
 
 
 @dataclass(slots=True, frozen=True)

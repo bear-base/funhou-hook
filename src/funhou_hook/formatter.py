@@ -19,7 +19,12 @@ def format_message(message: FunhouMessage) -> str:
 
 def _format_log(message: LogMessage) -> str:
     timestamp = message.timestamp.strftime("%H:%M:%S")
-    icon = {"info": "INFO", "warning": "WARN", "danger": "DANG"}[message.level]
+    icon = {
+        "info": "INFO",
+        "warning": "WARN",
+        "danger": "DANG",
+        "error": "ERROR",
+    }[message.level]
     return f"{timestamp} [{icon}] {message.tool}: {message.message}"
 
 
