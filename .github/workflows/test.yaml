@@ -1,0 +1,62 @@
+name: Python Tests
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Run Ruff lint
+        run: uv run ruff check --output-format=github hook.py src tests
+
+      - name: Run Ruff format check
+        shell: bash
+        run: |
+          set +e
+          output="$(uv run ruff format --check hook.py src tests 2>&1)"
+          status=$?
+          printf '%s\n' "$output"
+
+          if [ "$status" -eq 0 ]; then
+            exit 0
+          fi
+
+          if [ "$status" -eq 1 ]; then
+            while IFS= read -r line; do
+              case "$line" in
+                "Would reformat: "*)
+                  file="${line#Would reformat: }"
+                  echo "::warning file=$file,title=Ruff format::This file is not formatted according to Ruff."
+                  ;;
+              esac
+            done <<< "$output"
+            exit 0
+          fi
+
+          exit "$status"
+
+      - name: Run pytest
+        run: uv run pytest tests
