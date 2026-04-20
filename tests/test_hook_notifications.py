@@ -106,8 +106,7 @@ def test_post_tool_failure_without_pending_is_treated_as_normal_failure() -> Non
     assert isinstance(message, LogMessage)
     assert message.level == "warning"
     assert (
-        message.message
-        == "Failed Bash git diff src/pages/noise.astro | head -100: Command failed"
+        message.message == "Failed Bash git diff src/pages/noise.astro | head -100: Command failed"
     )
 
 

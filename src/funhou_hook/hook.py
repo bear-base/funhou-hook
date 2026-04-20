@@ -486,9 +486,7 @@ def _load_pending_approvals() -> dict[str, dict[str, str]]:
 def _save_pending_approvals(state: dict[str, dict[str, str]]) -> None:
     APPROVAL_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     _debug_stage("state.save.start", None, path=str(APPROVAL_STATE_PATH), entry_count=len(state))
-    temp_path = APPROVAL_STATE_PATH.with_name(
-        f"{APPROVAL_STATE_PATH.name}.{uuid.uuid4().hex}.tmp"
-    )
+    temp_path = APPROVAL_STATE_PATH.with_name(f"{APPROVAL_STATE_PATH.name}.{uuid.uuid4().hex}.tmp")
     try:
         temp_path.write_text(
             json.dumps(state, ensure_ascii=True, sort_keys=True, indent=2),
