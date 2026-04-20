@@ -21,7 +21,7 @@ def dispatch_message(message: FunhouMessage, channel: ChannelConfig) -> None:
 
 def _append_line(path: Path, line: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = f"{line}\n".encode("utf-8")
+    payload = f"{line}\n".encode()
     if not path.exists() or path.stat().st_size == 0:
         with path.open("wb") as handle:
             handle.write(BOM_UTF8)

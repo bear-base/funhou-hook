@@ -9,7 +9,10 @@ from funhou_hook.messages import LogMessage
 def _config() -> FunhouConfig:
     return FunhouConfig(
         rules=(),
-        terminal=ChannelConfig(output=Path("/tmp/test-funhou.log"), levels=("info", "warning", "danger", "error")),
+        terminal=ChannelConfig(
+            output=Path("/tmp/test-funhou.log"),
+            levels=("info", "warning", "danger", "error"),
+        ),
         default_level="warning",
     )
 
@@ -102,7 +105,10 @@ def test_post_tool_failure_without_pending_is_treated_as_normal_failure() -> Non
     message = messages[0]
     assert isinstance(message, LogMessage)
     assert message.level == "warning"
-    assert message.message == "Failed Bash git diff src/pages/noise.astro | head -100: Command failed"
+    assert (
+        message.message
+        == "Failed Bash git diff src/pages/noise.astro | head -100: Command failed"
+    )
 
 
 def test_post_tool_use_with_pending_still_emits_approval_granted_and_completed() -> None:
@@ -122,6 +128,12 @@ def test_post_tool_use_with_pending_still_emits_approval_granted_and_completed()
 
     assert len(messages) == 2
     assert isinstance(messages[0], LogMessage)
-    assert messages[0].message == "Approval granted: Edit C:\\workspace\\bear-base\\jikken\\src\\pages\\noise.astro"
+    assert (
+        messages[0].message
+        == "Approval granted: Edit C:\\workspace\\bear-base\\jikken\\src\\pages\\noise.astro"
+    )
     assert isinstance(messages[1], LogMessage)
-    assert messages[1].message == "Completed Edit C:\\workspace\\bear-base\\jikken\\src\\pages\\noise.astro"
+    assert (
+        messages[1].message
+        == "Completed Edit C:\\workspace\\bear-base\\jikken\\src\\pages\\noise.astro"
+    )
