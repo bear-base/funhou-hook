@@ -153,15 +153,13 @@ def _build_notification_messages(payload: dict[str, Any], config: Any) -> list[F
     )
 
     if notification_type == "permission_prompt":
-        return [
-            ApprovalMessage(
-                timestamp=utc_now(),
-                level="danger",
-                tool="Notification",
-                command=title,
-                reason=message,
-            )
-        ]
+        _debug_stage(
+            "notification.ignored",
+            payload,
+            notification_type=notification_type,
+            reason="permission_prompt is redundant with PermissionRequest",
+        )
+        return []
 
     return [
         LogMessage(
@@ -283,18 +281,7 @@ def _build_post_tool_use_messages(payload: dict[str, Any]) -> list[FunhouMessage
         result="matched" if pending else "match_failed",
     )
 
-    if pending is None:
-        messages.append(
-            _error_message(
-                event.target,
-                (
-                    "Approval result could not be correlated for "
-                    f"{event.tool_name}; tool_use_id={tool_use_id or '<missing>'}, "
-                    f"fallback_key={fallback_key}"
-                ),
-            )
-        )
-    else:
+    if pending is not None:
         messages.append(
             LogMessage(
                 timestamp=utc_now(),
@@ -344,18 +331,7 @@ def _build_post_tool_failure_messages(payload: dict[str, Any]) -> list[FunhouMes
     )
     error = _extract_error(payload)
 
-    if pending is None:
-        messages.append(
-            _error_message(
-                event.target,
-                (
-                    "Approval result could not be correlated for "
-                    f"{event.tool_name}; tool_use_id={tool_use_id or '<missing>'}, "
-                    f"fallback_key={fallback_key}"
-                ),
-            )
-        )
-    else:
+    if pending is not None:
         messages.append(
             LogMessage(
                 timestamp=utc_now(),
