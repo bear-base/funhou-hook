@@ -458,7 +458,7 @@ def _load_pending_approvals() -> dict[str, dict[str, str]]:
         return {}
 
     raw_text = APPROVAL_STATE_PATH.read_text(encoding="utf-8")
-    _debug_stage("state.load.read", None, bytes=len(raw_text.encode("utf-8")), chars=len(raw_text))
+    _debug_stage("state.load.read", None, bytes=len(raw_text.encode()), chars=len(raw_text))
     try:
         raw = json.loads(raw_text)
     except json.JSONDecodeError as exc:
@@ -468,7 +468,10 @@ def _load_pending_approvals() -> dict[str, dict[str, str]]:
 
     if not isinstance(raw, dict):
         _debug_stage("state.load.not_dict", None, raw_type=type(raw).__name__)
-        _recover_broken_state(raw_text, ValueError("Approval state file must contain a JSON object."))
+        _recover_broken_state(
+            raw_text,
+            ValueError("Approval state file must contain a JSON object."),
+        )
         return {}
 
     state = {
@@ -483,9 +486,7 @@ def _load_pending_approvals() -> dict[str, dict[str, str]]:
 def _save_pending_approvals(state: dict[str, dict[str, str]]) -> None:
     APPROVAL_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     _debug_stage("state.save.start", None, path=str(APPROVAL_STATE_PATH), entry_count=len(state))
-    temp_path = APPROVAL_STATE_PATH.with_name(
-        f"{APPROVAL_STATE_PATH.name}.{uuid.uuid4().hex}.tmp"
-    )
+    temp_path = APPROVAL_STATE_PATH.with_name(f"{APPROVAL_STATE_PATH.name}.{uuid.uuid4().hex}.tmp")
     try:
         temp_path.write_text(
             json.dumps(state, ensure_ascii=True, sort_keys=True, indent=2),
@@ -559,7 +560,10 @@ def _debug_stage(stage: str, payload: dict[str, Any] | None, **extra: Any) -> No
         )
         tool_input = payload.get("tool_input")
         if isinstance(tool_input, dict):
-            record["target"] = _extract_target(str(payload.get("tool_name") or "unknown"), tool_input)
+            record["target"] = _extract_target(
+                str(payload.get("tool_name") or "unknown"),
+                tool_input,
+            )
     record.update(extra)
     _append_debug_record(record)
 
@@ -620,7 +624,12 @@ def _debug_correlation(
         handle.write(json.dumps(record, ensure_ascii=True, sort_keys=True) + "\n")
 
 
-def _put_pending_approval(correlation_key: str, key_type: str, session_id: str, event: ToolEvent) -> None:
+def _put_pending_approval(
+    correlation_key: str,
+    key_type: str,
+    session_id: str,
+    event: ToolEvent,
+) -> None:
     _debug_stage(
         "state.put.start",
         None,
@@ -709,7 +718,7 @@ def _error_message(target: str, message: str) -> LogMessage:
 
 def _append_operational_log(message: LogMessage) -> None:
     DEFAULT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    payload = f"{format_message(message)}\n".encode("utf-8")
+    payload = f"{format_message(message)}\n".encode()
     if not DEFAULT_LOG_PATH.exists() or DEFAULT_LOG_PATH.stat().st_size == 0:
         with DEFAULT_LOG_PATH.open("wb") as handle:
             handle.write(BOM_UTF8)

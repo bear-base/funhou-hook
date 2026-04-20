@@ -61,8 +61,7 @@ def load_config(path: Path | None = None) -> FunhouConfig:
 
     raw_rules = raw.get("rules", [])
     rules = tuple(
-        HardRule(match=item["match"], level=_coerce_level(item["level"]))
-        for item in raw_rules
+        HardRule(match=item["match"], level=_coerce_level(item["level"])) for item in raw_rules
     )
 
     channels = raw.get("channels", {})
