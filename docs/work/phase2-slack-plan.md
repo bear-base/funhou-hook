@@ -227,3 +227,13 @@ def build_slack_payload(
 
 - 動作確認はユニットテストで完結させる(Slack への実送信は不要)
 - 既存の terminal formatter(src/funhou_hook/formatter.py)には手を入れない
+
+## 実装完了
+
+### Ticket 4' : Slack 表示ポリシーの純粋関数実装
+
+- [src/funhou_hook/slack_formatter.py](../../src/funhou_hook/slack_formatter.py) を追加し、`build_slack_payload()` を純粋関数として実装した。
+- `log` / `summary` / `approval` の3種類について、Slack Incoming Webhook 向け payload 生成を実装した。
+- `mention_to` / `mention_levels` によるメンション付与、未知ツール時のアイコン fallback、未知 message 型への `TypeError` を実装した。
+- [tests/test_slack_formatter.py](../../tests/test_slack_formatter.py) を追加し、代表ケースと境界ケースをユニットテストで固定した。
+- 人間確認では `uv run pytest` が通過し、Slack formatter 追加による既存テストの破壊がないことを確認した。
