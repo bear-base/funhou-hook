@@ -164,3 +164,66 @@
 - 既存の [src/funhou_hook/formatter.py](../../src/funhou_hook/formatter.py) は terminal 向け 1 行整形なので、Slack 連携では formatter の責務分離を前提にした方が安全。
 - [src/funhou_hook/hook.py](../../src/funhou_hook/hook.py) には approval state や debug log の処理が多く入っているが、今回の Slack 連携ではそこへ仕様を寄せ過ぎず、配送レイヤーの追加で閉じる方針がよい。
 - `SummaryMessage` は型として既に存在するため、生成エンジン未実装でも Slack 側の受け皿だけ先に定義しておくと後続作業を分離しやすい。
+
+## 人間による判断結果
+
+- Ticket4を先に作るために、純粋関数としてまずは実装して仕様確定をすることを提案する。仕様案は下記
+  1. 一番不確実な部分(見せ方の設計判断)を最小コストで先に固められる
+  2. 二度手間が発生しない
+  3. テストカバレッジが自然に厚くなる
+  4. Ticket 1(設定)との依存が切れる
+  5. サンドボックス内で完結する
+- 実装順を右記の通りとする: 4' → 1 → 2 → 3 → 5
+
+### Ticket 4' : Slack 表示ポリシーの純粋関数実装
+
+Slack への表示を、送信や設定から切り離した純粋関数として実装してください。
+
+#### 作るもの
+
+`src/funhou_hook/slack_formatter.py`(仮)に、以下の関数を実装:
+
+```python
+def build_slack_payload(
+    message: FunhouMessage,
+    mention_to: str | None = None,
+    mention_levels: set[Level] = frozenset(),
+) -> dict:
+    """FunhouMessage を Slack Incoming Webhook 用の JSON dict に変換する。"""
+```
+
+#### 入力と出力
+
+- 入力: FunhouMessage(LogMessage / SummaryMessage / ApprovalMessage)
+- 出力: Slack Incoming Webhook に POST する JSON dict
+
+#### 表示ポリシー(設計ドキュメントの「Slack表示」セクションを参照)
+
+- log: 1行テキスト、ツール種別に応じた絵文字
+- summary: Block Kit、複数行、時刻範囲 + 本文 + 次のアクション
+- approval: Block Kit、🔴 アイコン、理由、メンション付き(ボタンは Phase3 なのでプレーンテキストの指示でよい)
+- mention_levels に含まれるレベルのメッセージには mention_to を付与
+
+#### 完了条件
+
+- 3種類のメッセージ × 各レベル(info/warning/danger)の代表ケースで、
+  期待される payload 構造をユニットテストで固定する
+- HTTP 送信は呼び出さない、設定ファイルも読まない(純粋関数)
+- mention_to=None / mention_levels=空 のときはメンションが付かないことをテスト
+
+#### スコープ外
+
+- HTTP 送信
+- 設定ファイル読み込み
+- 配送の多重化
+- Slack Bot トークンや返信処理
+
+#### 補足
+
+- この関数は Ticket 2(webhook 送信)から呼ばれる
+- mention_to / mention_levels は呼び出し側が設定から取り出して渡す(この関数は引数で受け取るだけ)
+
+#### 制約
+
+- 動作確認はユニットテストで完結させる(Slack への実送信は不要)
+- 既存の terminal formatter(src/funhou_hook/formatter.py)には手を入れない
