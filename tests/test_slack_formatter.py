@@ -1,5 +1,7 @@
 from datetime import UTC, datetime
 
+import pytest
+
 from funhou_hook import ApprovalMessage, LogMessage, SummaryMessage
 from funhou_hook.slack_formatter import build_slack_payload
 
@@ -131,3 +133,61 @@ def test_build_slack_payload_does_not_add_mention_when_level_is_not_selected() -
     )
 
     assert payload == {"text": "📄 Read src/config.ts"}
+
+
+def test_build_slack_payload_does_not_add_mention_when_mention_target_is_missing() -> None:
+    message = LogMessage(
+        timestamp=datetime(2026, 4, 9, 10, 7, tzinfo=UTC),
+        level="warning",
+        tool="Bash",
+        target="npm run build",
+        message="Bash npm run build",
+    )
+
+    payload = build_slack_payload(
+        message,
+        mention_to=None,
+        mention_levels={"warning", "danger"},
+    )
+
+    assert payload == {"text": "🔨 Bash npm run build"}
+
+
+def test_build_slack_payload_uses_level_icon_for_unknown_tool_names() -> None:
+    message = LogMessage(
+        timestamp=datetime(2026, 4, 9, 10, 8, tzinfo=UTC),
+        level="error",
+        tool="Hook",
+        target="src/config.ts",
+        message="Hook runtime error",
+    )
+
+    payload = build_slack_payload(message)
+
+    assert payload == {"text": "❌ Hook runtime error"}
+
+
+def test_build_slack_payload_renders_approval_without_mention_when_not_requested() -> None:
+    message = ApprovalMessage(
+        timestamp=datetime(2026, 4, 9, 10, 16, tzinfo=UTC),
+        level="danger",
+        tool="Bash",
+        command="npx prisma migrate deploy",
+        reason="本番DBへのマイグレーション実行",
+    )
+
+    payload = build_slack_payload(message)
+
+    assert payload["text"] == (
+        "🔴 承認待ち: 本番DBへのマイグレーション実行 "
+        "(Bash npx prisma migrate deploy)"
+    )
+    assert payload["blocks"][0] == {
+        "type": "section",
+        "text": {"type": "mrkdwn", "text": "🔴 *承認待ち*"},
+    }
+
+
+def test_build_slack_payload_rejects_unknown_message_types() -> None:
+    with pytest.raises(TypeError, match="Unsupported message type: object"):
+        build_slack_payload(object())

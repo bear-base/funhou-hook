@@ -84,19 +84,19 @@ def _build_approval_payload(
     mention_to: str | None,
     mention_levels: set[Level],
 ) -> dict:
-    prefix = _prefix_mention(
+    title = _prefix_mention(
         "🔴 承認待ち",
         level=message.level,
         mention_to=mention_to,
         mention_levels=mention_levels,
     )
-    text = f"{prefix}: {message.reason} ({message.tool} {message.command})"
+    text = f"{title}: {message.reason} ({message.tool} {message.command})"
     return {
         "text": text,
         "blocks": [
             {
                 "type": "section",
-                "text": {"type": "mrkdwn", "text": f"{prefix.replace(' 承認待ち', ' *承認待ち*')}"},
+                "text": {"type": "mrkdwn", "text": _format_approval_heading(title)},
             },
             {
                 "type": "section",
@@ -123,9 +123,15 @@ def _prefix_mention(
     mention_to: str | None,
     mention_levels: set[Level],
 ) -> str:
-    if mention_to is None or level not in mention_levels:
+    if not mention_to or level not in mention_levels:
         return text
     return f"{mention_to} {text}"
+
+
+def _format_approval_heading(title: str) -> str:
+    if title.startswith("🔴 "):
+        return title.replace("🔴 承認待ち", "🔴 *承認待ち*", 1)
+    return title.replace("承認待ち", "*承認待ち*", 1)
 
 
 def _format_summary_start(message: SummaryMessage) -> str:
