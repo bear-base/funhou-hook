@@ -2,17 +2,15 @@
 
 ## 前提
 
-- 設計ドキュメントは [docs/ai-agent-funhou-system.md](/C:/workspace/bear-base/funhou-hook/docs/ai-agent-funhou-system.md) を参照した。
-- Phase1 の現行実装は [src/funhou_hook/hook.py](/C:/workspace/bear-base/funhou-hook/src/funhou_hook/hook.py) を起点に、`load_config()` で設定を読み、`_build_messages()` で `FunhouMessage` を生成し、`dispatch_message()` で terminal へ配送する構成になっている。
-- ドキュメントとの差異があっても、プランでは実装を正として扱う。
-- 今回の対象は Slack 送信だけであり、サマリー生成ロジックやトリガー条件の実装は扱わない。
+- 設計ドキュメントは [docs/ai-agent-funhou-system.md](../ai-agent-funhou-system.md) を参照した。
+- Phase1 の現行実装は [src/funhou_hook/hook.py](../../src/funhou_hook/hook.py) を起点に、`load_config()` で設定を読み、`_build_messages()` で `FunhouMessage` を生成し、`dispatch_message()` で terminal へ配送する構成になっている。
 
 ## 現状の Slack 連携に関係する事実
 
-- メッセージ型は [src/funhou_hook/messages.py](/C:/workspace/bear-base/funhou-hook/src/funhou_hook/messages.py) に `LogMessage` / `SummaryMessage` / `ApprovalMessage` として定義済み。
-- Hook の出口は [src/funhou_hook/hook.py](/C:/workspace/bear-base/funhou-hook/src/funhou_hook/hook.py) の `main()` で、各メッセージを `dispatch_message(message, config.terminal)` へ順次渡している。
-- 出力チャネル設定は [src/funhou_hook/config.py](/C:/workspace/bear-base/funhou-hook/src/funhou_hook/config.py) の `FunhouConfig` が `terminal: ChannelConfig` を 1 つだけ持つ形で、[config/funhou.toml](/C:/workspace/bear-base/funhou-hook/config/funhou.toml) も `channels.terminal` のみ定義している。
-- stdout アダプター相当の実装は [src/funhou_hook/dispatcher.py](/C:/workspace/bear-base/funhou-hook/src/funhou_hook/dispatcher.py) にあり、`LogMessage.level` のフィルタ後に `format_message()` の結果をファイル追記している。
+- メッセージ型は [src/funhou_hook/messages.py](../../src/funhou_hook/messages.py) に `LogMessage` / `SummaryMessage` / `ApprovalMessage` として定義済み。
+- Hook の出口は [src/funhou_hook/hook.py](../../src/funhou_hook/hook.py) の `main()` で、各メッセージを `dispatch_message(message, config.terminal)` へ順次渡している。
+- 出力チャネル設定は [src/funhou_hook/config.py](../../src/funhou_hook/config.py) の `FunhouConfig` が `terminal: ChannelConfig` を 1 つだけ持つ形で、[config/funhou.toml](../../config/funhou.toml) も `channels.terminal` のみ定義している。
+- stdout アダプター相当の実装は [src/funhou_hook/dispatcher.py](../../src/funhou_hook/dispatcher.py) にあり、`LogMessage.level` のフィルタ後に `format_message()` の結果をファイル追記している。
 - 既存テストは `Notification` 系やメッセージ契約の確認が中心で、配送先追加をカバーするテストはまだ存在しない。
 
 ## チケット一覧
@@ -23,8 +21,8 @@
   Phase1 の `terminal` 固定設定を壊さずに、Slack の有効/無効・Webhook URL・通知レベルなどを設定ファイルから読める状態にする。
 - 入力と出力
   入力:
-  [src/funhou_hook/config.py](/C:/workspace/bear-base/funhou-hook/src/funhou_hook/config.py) の `ChannelConfig` / `FunhouConfig` / `load_config()`
-  [config/funhou.toml](/C:/workspace/bear-base/funhou-hook/config/funhou.toml)
+  [src/funhou_hook/config.py](../../src/funhou_hook/config.py) の `ChannelConfig` / `FunhouConfig` / `load_config()`
+  [config/funhou.toml](../../config/funhou.toml)
   出力:
   terminal と slack を保持できる設定モデル
   Slack 用設定のデータクラスとローダー
@@ -46,7 +44,7 @@
   `FunhouMessage` を受け取り、Slack Incoming Webhook に対して HTTP POST できる最小アダプターを追加する。
 - 入力と出力
   入力:
-  [src/funhou_hook/messages.py](/C:/workspace/bear-base/funhou-hook/src/funhou_hook/messages.py) の `FunhouMessage`
+  [src/funhou_hook/messages.py](../../src/funhou_hook/messages.py) の `FunhouMessage`
   Ticket 1 で追加する Slack 設定
   出力:
   Slack 送信用モジュール
@@ -69,8 +67,8 @@
   `hook.py` のメッセージ配送を terminal 専用から、設定された複数チャネルへ配信できる形にする。
 - 入力と出力
   入力:
-  [src/funhou_hook/hook.py](/C:/workspace/bear-base/funhou-hook/src/funhou_hook/hook.py) の `main()`
-  [src/funhou_hook/dispatcher.py](/C:/workspace/bear-base/funhou-hook/src/funhou_hook/dispatcher.py) の `dispatch_message()`
+  [src/funhou_hook/hook.py](../../src/funhou_hook/hook.py) の `main()`
+  [src/funhou_hook/dispatcher.py](../../src/funhou_hook/dispatcher.py) の `dispatch_message()`
   Ticket 1, 2 の設定モデルと Slack アダプター
   出力:
   terminal / slack のファンアウト処理
@@ -93,8 +91,8 @@
   `log` / `approval` / `summary` を Slack 上でどう見せるかを、プロジェクト固有の表示ルールとして固定する。
 - 入力と出力
   入力:
-  [src/funhou_hook/messages.py](/C:/workspace/bear-base/funhou-hook/src/funhou_hook/messages.py) の 3 message type
-  [src/funhou_hook/formatter.py](/C:/workspace/bear-base/funhou-hook/src/funhou_hook/formatter.py) の terminal 向け表現
+  [src/funhou_hook/messages.py](../../src/funhou_hook/messages.py) の 3 message type
+  [src/funhou_hook/formatter.py](../../src/funhou_hook/formatter.py) の terminal 向け表現
   設計ドキュメント中の Slack 表示イメージ
   出力:
   Slack 向け formatter もしくは payload builder
@@ -163,6 +161,6 @@
 
 ## 補足メモ
 
-- 既存の [src/funhou_hook/formatter.py](/C:/workspace/bear-base/funhou-hook/src/funhou_hook/formatter.py) は terminal 向け 1 行整形なので、Slack 連携では formatter の責務分離を前提にした方が安全。
-- [src/funhou_hook/hook.py](/C:/workspace/bear-base/funhou-hook/src/funhou_hook/hook.py) には approval state や debug log の処理が多く入っているが、今回の Slack 連携ではそこへ仕様を寄せ過ぎず、配送レイヤーの追加で閉じる方針がよい。
+- 既存の [src/funhou_hook/formatter.py](../../src/funhou_hook/formatter.py) は terminal 向け 1 行整形なので、Slack 連携では formatter の責務分離を前提にした方が安全。
+- [src/funhou_hook/hook.py](../../src/funhou_hook/hook.py) には approval state や debug log の処理が多く入っているが、今回の Slack 連携ではそこへ仕様を寄せ過ぎず、配送レイヤーの追加で閉じる方針がよい。
 - `SummaryMessage` は型として既に存在するため、生成エンジン未実装でも Slack 側の受け皿だけ先に定義しておくと後続作業を分離しやすい。
