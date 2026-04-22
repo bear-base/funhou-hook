@@ -237,3 +237,11 @@ def build_slack_payload(
 - `mention_to` / `mention_levels` によるメンション付与、未知ツール時のアイコン fallback、未知 message 型への `TypeError` を実装した。
 - [tests/test_slack_formatter.py](../../tests/test_slack_formatter.py) を追加し、代表ケースと境界ケースをユニットテストで固定した。
 - 人間確認では `uv run pytest` が通過し、Slack formatter 追加による既存テストの破壊がないことを確認した。
+
+### Ticket 1 : 設定モデルと Slack 設定ローダーの実装
+- [src/funhou_hook/config.py](../../src/funhou_hook/config.py) に `TerminalChannelConfig` / `SlackChannelConfig` を追加し、`FunhouConfig` が `terminal` と `slack` の両方を持てる形に拡張した。
+- `load_config()` で `channels.slack` を読めるようにし、`enabled` / `webhook` / `levels` / `mention_on` / `mention_to` を構造化して返すようにした。
+- バリデーションとして、`channels.slack.enabled = true` のときは `webhook` 必須、`levels` / `mention_on` の不正な level は `ValueError` にしている。
+- [tests/test_config.py](../../tests/test_config.py) を追加し、既存互換、Slack 正常系、Slack 無効時、`webhook` 未指定、`levels` / `mention_on` 異常系を固定した。
+- Windows の `tmp_path` 権限エラーを避けるため、config テストは OS の temp ではなく `tests/.tmp/` 配下に一時ファイルを作る fixture を使っている。
+- [config/funhou.toml](../../config/funhou.toml) に disabled な `channels.slack` サンプルを追加済みなので、Ticket 2 以降はこの設定モデルを前提に Webhook 送信実装へ進めてよい。
