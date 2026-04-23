@@ -74,17 +74,27 @@
   出力:
   terminal / slack のファンアウト処理
   チャネルごとの level フィルタ
+  チャネルごとの message type フィルタ
   どのチャネル失敗を hook 全体の失敗にするかの整理
 - 完了条件
   Hook が生成した 1 件の `FunhouMessage` を terminal と slack に独立して配送できる。
   Slack が無効なら terminal のみ動作する。
+  `SummaryMessage` は level ではなく channel ごとの message type 設定で配送有無を切り替えられる。
+  `LogMessage` / `ApprovalMessage` は message type と level の両方を尊重して配送できる。
   Slack 配送失敗時も terminal 出力が失われないことをユニットテストで確認できる。
 - スコープ外
   Slack 表示文面の詳細改善
   サマリー生成そのもの
   配送リトライやキューイング
 - 後続セッションで渡せる指示文ドラフト
-  `既存の dispatch_message() と hook.py の配送処理を見直して、terminal と slack の複数チャネルへ配信できるようにしてください。channel ごとの levels を尊重し、Slack が失敗しても terminal 出力は継続する方針で、挙動をユニットテストで固定してください。`
+  `既存の dispatch_message() と hook.py の配送処理を見直して、terminal と slack の複数チャネルへ配信できるようにしてください。channel ごとの levels に加えて message_types も尊重し、summary は channel ごとの message type 設定で配送有無を切り替えられるようにしてください。Slack が失敗しても terminal 出力は継続する方針で、挙動をユニットテストで固定してください。`
+
+#### Ticket 3 の追加設計メモ
+
+- `summary` は全チャネル一律配信ではなく、チャネルごとに出し分ける。これを `levels` に無理に載せず、`message_types` のような購読設定をチャネル設定に追加して制御する想定にする。
+- `LogMessage` / `ApprovalMessage` は `message_types` と `levels` の両方で配送判定する。
+- `SummaryMessage` は `message_types` のみで配送判定する。
+- たとえば terminal は `log, approval, summary`、Slack は `approval, summary` のように channel ごとの差を設定できる形を目標にする。
 
 ### Ticket 4: Slack 上の表示ポリシーを message type ごとに定義して実装する
 
@@ -165,6 +175,7 @@
 - 既存の [src/funhou_hook/formatter.py](../../src/funhou_hook/formatter.py) は terminal 向け 1 行整形なので、Slack 連携では formatter の責務分離を前提にした方が安全。
 - [src/funhou_hook/hook.py](../../src/funhou_hook/hook.py) には approval state や debug log の処理が多く入っているが、今回の Slack 連携ではそこへ仕様を寄せ過ぎず、配送レイヤーの追加で閉じる方針がよい。
 - `SummaryMessage` は型として既に存在するため、生成エンジン未実装でも Slack 側の受け皿だけ先に定義しておくと後続作業を分離しやすい。
+- 配送失敗や調査用ログは Ticket 3 の局所対応として増やすだけでなく、将来的には「何かあった時に能動的に読みに行く運用ログ」をプロジェクト全体でどう持つかを別途設計した方がよい。Slack 失敗ログはその全体設計の一部として扱う。
 
 ## 人間による判断結果
 
