@@ -247,3 +247,11 @@ def build_slack_payload(
 - [tests/test_config.py](../../tests/test_config.py) を追加し、既存互換、Slack 正常系、Slack 無効時、`webhook` 未指定、`levels` / `mention_on` 異常系を固定した。
 - Windows の `tmp_path` 権限エラーを避けるため、config テストは OS の temp ではなく `tests/.tmp/` 配下に一時ファイルを作る fixture を使っている。
 - [config/funhou.toml](../../config/funhou.toml) に disabled な `channels.slack` サンプルを追加済みなので、Ticket 2 以降はこの設定モデルを前提に Webhook 送信実装へ進めてよい。
+
+### Ticket 2 : Slack 送信アダプターの実装
+- [src/funhou_hook/slack_sender.py](../../src/funhou_hook/slack_sender.py) を追加し、`send_slack_message()` で `FunhouMessage` と `SlackChannelConfig` から Slack Incoming Webhook へ単発 POST できるようにした。
+- payload 生成は Ticket 4' の `build_slack_payload()` を利用し、`mention_to` / `mention_on` を設定から渡す形にした。
+- Slack 送信失敗は `SlackDeliveryError` に統一し、HTTP status、短く切り詰めた response body、元例外を保持できるようにした。再試行・キューイング・dispatcher 継続判断はスコープ外として残している。
+- [tests/test_slack_sender.py](../../tests/test_slack_sender.py) を追加し、実ネットワークなしで POST リクエスト内容、メンション反映、HTTP 失敗、ネットワーク失敗、webhook 未設定を固定した。
+- 人間確認では `tests/test_config.py` / `tests/test_slack_formatter.py` / `tests/test_slack_sender.py` の関連テストが通過し、ruff の対象ファイルチェックも通過した。全体テストは既存の `/tmp/funhou-debug.log` 権限エラーで `test_hook_notifications.py` が失敗しているため、Ticket2 とは別途確認が必要。
+- Slack webhook URL と mention 先は `config/funhou.toml` ではなく git 管理外の `config/.env` から読む形に変更し、`config/.env.example` と `config/.env` の ignore 設定を追加した。ユーザー確認では `uv run pytest` と Slack 実機への `Slack webhook manual test` 投稿が通過した。

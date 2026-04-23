@@ -31,7 +31,5 @@ levels = ["info", "warning", "danger", "error"]
 
 [channels.slack]
 enabled = false
-# webhook = "https://hooks.slack.com/services/T000/B000/XXXX"
 levels = ["info", "warning", "danger", "error"]
 mention_on = ["warning", "danger"]
-# mention_to = "@you"
