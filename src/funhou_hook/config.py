@@ -3,17 +3,27 @@
 from __future__ import annotations
 
 import tomllib
+from collections.abc import Mapping
 from dataclasses import dataclass
+from os import environ
 from pathlib import Path
 from typing import Any
+
+try:
+    from dotenv import dotenv_values
+except ModuleNotFoundError:
+    dotenv_values = None
 
 from .messages import Level
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = PACKAGE_ROOT / "config" / "funhou.toml"
+DEFAULT_ENV_PATH = PACKAGE_ROOT / "config" / ".env"
 DEFAULT_LOG_PATH = Path("/tmp/funhou.log")
 DEFAULT_LEVELS = ("info", "warning", "danger", "error")
 DEFAULT_MENTION_LEVELS = ("warning", "danger")
+SLACK_WEBHOOK_ENV = "SLACK_WEBHOOK_URL"
+SLACK_MENTION_TO_ENV = "SLACK_MENTION_TO"
 
 
 @dataclass(slots=True, frozen=True)
@@ -80,12 +90,12 @@ def _load_channel(data: dict[str, Any]) -> TerminalChannelConfig:
     return TerminalChannelConfig(output=output, levels=levels)
 
 
-def _load_slack_channel(data: dict[str, Any]) -> SlackChannelConfig:
+def _load_slack_channel(data: dict[str, Any], env: Mapping[str, str]) -> SlackChannelConfig:
     enabled = bool(data.get("enabled", False))
-    webhook = _coerce_optional_string(data.get("webhook"))
+    webhook = _coerce_optional_string(env.get(SLACK_WEBHOOK_ENV))
     raw_levels = data.get("levels", list(DEFAULT_LEVELS))
     raw_mention_levels = data.get("mention_on", list(DEFAULT_MENTION_LEVELS))
-    mention_to = _coerce_optional_string(data.get("mention_to"))
+    mention_to = _coerce_optional_string(env.get(SLACK_MENTION_TO_ENV))
 
     levels = _coerce_levels(raw_levels)
     mention_on = _coerce_levels(raw_mention_levels)
@@ -107,6 +117,7 @@ def load_config(path: Path | None = None) -> FunhouConfig:
 
     config_path = path or DEFAULT_CONFIG_PATH
     raw = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    env = _load_env(config_path.with_name(".env"))
 
     raw_rules = raw.get("rules", [])
     rules = tuple(
@@ -115,7 +126,7 @@ def load_config(path: Path | None = None) -> FunhouConfig:
 
     channels = raw.get("channels", {})
     terminal = _load_channel(channels.get("terminal", {}))
-    slack = _load_slack_channel(channels.get("slack", {}))
+    slack = _load_slack_channel(channels.get("slack", {}), env)
     default_level = _coerce_level(raw.get("defaults", {}).get("level", "warning"))
 
     return FunhouConfig(
@@ -124,3 +135,26 @@ def load_config(path: Path | None = None) -> FunhouConfig:
         slack=slack,
         default_level=default_level,
     )
+
+
+def _load_env(path: Path = DEFAULT_ENV_PATH) -> dict[str, str]:
+    if dotenv_values is None:
+        file_values = _read_env_fallback(path)
+        return {**file_values, **environ}
+
+    file_values = {key: value for key, value in dotenv_values(path).items() if value is not None}
+    return {**file_values, **environ}
+
+
+def _read_env_fallback(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+
+    values: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        values[key.strip()] = value.strip().strip("\"'")
+    return values

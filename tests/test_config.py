@@ -18,20 +18,24 @@ def config_dir() -> Iterator[Path]:
         shutil.rmtree(path, ignore_errors=True)
 
 
-def test_load_config_keeps_existing_terminal_defaults_without_slack() -> None:
-    config = load_config()
-
-    assert config.terminal.output == Path("/tmp/funhou.log")
-    assert config.terminal.levels == ("info", "warning", "danger", "error")
-    assert config.slack.enabled is False
-    assert config.slack.webhook is None
-    assert config.slack.levels == ("info", "warning", "danger", "error")
-    assert config.slack.mention_on == ("warning", "danger")
-    assert config.slack.mention_to is None
+@pytest.fixture(autouse=True)
+def clear_slack_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SLACK_WEBHOOK_URL", raising=False)
+    monkeypatch.delenv("SLACK_MENTION_TO", raising=False)
 
 
-def test_load_config_reads_explicit_slack_settings(config_dir: Path) -> None:
+def test_load_config_reads_slack_values_from_env_loader(
+    config_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     config_path = config_dir / "funhou.toml"
+    monkeypatch.setattr(
+        "funhou_hook.config._load_env",
+        lambda path: {
+            "SLACK_WEBHOOK_URL": "https://hooks.slack.com/services/T000/B000/XXXX",
+            "SLACK_MENTION_TO": "@team",
+        },
+    )
     config_path.write_text(
         """
 [[rules]]
@@ -47,10 +51,8 @@ levels = ["info", "warning"]
 
 [channels.slack]
 enabled = true
-webhook = "https://hooks.slack.com/services/T000/B000/XXXX"
 levels = ["warning", "danger", "error"]
 mention_on = ["danger", "error"]
-mention_to = "@team"
 """.strip(),
         encoding="utf-8",
     )
@@ -66,8 +68,12 @@ mention_to = "@team"
     assert config.slack.mention_to == "@team"
 
 
-def test_load_config_allows_disabled_slack_without_webhook(config_dir: Path) -> None:
+def test_load_config_allows_disabled_slack_without_env_values(
+    config_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     config_path = config_dir / "funhou.toml"
+    monkeypatch.setattr("funhou_hook.config._load_env", lambda path: {})
     config_path.write_text(
         """
 [channels.terminal]
@@ -89,8 +95,12 @@ mention_on = ["warning"]
     assert config.slack.mention_on == ("warning",)
 
 
-def test_load_config_rejects_enabled_slack_without_webhook(config_dir: Path) -> None:
+def test_load_config_rejects_enabled_slack_without_env_webhook(
+    config_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     config_path = config_dir / "funhou.toml"
+    monkeypatch.setattr("funhou_hook.config._load_env", lambda path: {})
     config_path.write_text(
         """
 [channels.terminal]
@@ -109,8 +119,15 @@ enabled = true
         load_config(config_path)
 
 
-def test_load_config_rejects_invalid_slack_level(config_dir: Path) -> None:
+def test_load_config_rejects_invalid_slack_level(
+    config_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     config_path = config_dir / "funhou.toml"
+    monkeypatch.setattr(
+        "funhou_hook.config._load_env",
+        lambda path: {"SLACK_WEBHOOK_URL": "https://hooks.slack.com/services/T000/B000/XXXX"},
+    )
     config_path.write_text(
         """
 [channels.terminal]
@@ -118,7 +135,6 @@ output = "/tmp/funhou.log"
 
 [channels.slack]
 enabled = true
-webhook = "https://hooks.slack.com/services/T000/B000/XXXX"
 levels = ["info", "noisy"]
 """.strip(),
         encoding="utf-8",
@@ -128,8 +144,15 @@ levels = ["info", "noisy"]
         load_config(config_path)
 
 
-def test_load_config_rejects_invalid_slack_mention_level(config_dir: Path) -> None:
+def test_load_config_rejects_invalid_slack_mention_level(
+    config_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     config_path = config_dir / "funhou.toml"
+    monkeypatch.setattr(
+        "funhou_hook.config._load_env",
+        lambda path: {"SLACK_WEBHOOK_URL": "https://hooks.slack.com/services/T000/B000/XXXX"},
+    )
     config_path.write_text(
         """
 [channels.terminal]
@@ -137,7 +160,6 @@ output = "/tmp/funhou.log"
 
 [channels.slack]
 enabled = true
-webhook = "https://hooks.slack.com/services/T000/B000/XXXX"
 mention_on = ["warning", "urgent"]
 """.strip(),
         encoding="utf-8",
@@ -145,3 +167,22 @@ mention_on = ["warning", "urgent"]
 
     with pytest.raises(ValueError, match="Unsupported level: urgent"):
         load_config(config_path)
+
+
+def test_load_env_reads_env_example() -> None:
+    from funhou_hook.config import _load_env
+
+    env = _load_env(Path(__file__).resolve().parents[1] / "config" / ".env.example")
+
+    assert env["SLACK_WEBHOOK_URL"] == "https://hooks.slack.com/services/T000/B000/XXXX"
+    assert env["SLACK_MENTION_TO"] == "@you"
+
+
+def test_load_env_prefers_os_env_over_env_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    from funhou_hook.config import _load_env
+
+    monkeypatch.setenv("SLACK_WEBHOOK_URL", "https://hooks.slack.com/services/OVERRIDE")
+
+    env = _load_env(Path(__file__).resolve().parents[1] / "config" / ".env.example")
+
+    assert env["SLACK_WEBHOOK_URL"] == "https://hooks.slack.com/services/OVERRIDE"
