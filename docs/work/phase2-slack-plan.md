@@ -60,6 +60,7 @@
   Slack Bot や返信処理
 - 後続セッションで渡せる指示文ドラフト
   `Slack Incoming Webhook 用の送信アダプターを追加してください。入力は FunhouMessage と Slack 設定で、Webhook に JSON を POST する単機能に絞ってください。HTTP クライアントは標準ライブラリ優先でよく、ネットワークを使わないユニットテストで payload とエラー処理を確認できる形にしてください。`
+- Slack 送信失敗は詳細な復旧制御を行わず、共通の SlackDeliveryError として扱う。HTTP ステータスや元例外など調査に必要な情報だけ保持し、再試行・キューイング・サービス停止判定は Phase2 のスコープ外とする。dispatcher 統合時は SlackDeliveryError をログに残し、terminal 出力は継続する。
 
 ### Ticket 3: Dispatcher を複数チャネル配信に拡張する
 
@@ -239,6 +240,7 @@ def build_slack_payload(
 - 人間確認では `uv run pytest` が通過し、Slack formatter 追加による既存テストの破壊がないことを確認した。
 
 ### Ticket 1 : 設定モデルと Slack 設定ローダーの実装
+
 - [src/funhou_hook/config.py](../../src/funhou_hook/config.py) に `TerminalChannelConfig` / `SlackChannelConfig` を追加し、`FunhouConfig` が `terminal` と `slack` の両方を持てる形に拡張した。
 - `load_config()` で `channels.slack` を読めるようにし、`enabled` / `webhook` / `levels` / `mention_on` / `mention_to` を構造化して返すようにした。
 - バリデーションとして、`channels.slack.enabled = true` のときは `webhook` 必須、`levels` / `mention_on` の不正な level は `ValueError` にしている。
