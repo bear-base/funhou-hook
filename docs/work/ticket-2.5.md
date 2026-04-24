@@ -54,9 +54,19 @@
 - payload / stdin の全文ダンプ系(`_debug_raw_stdin`, `_debug_event_payload`)
 - 相関調査用(`_debug_correlation`、`TEMP DEBUG` 明記)
 
-触らないもの:
+**state 系ログの扱い(TODO マーカーで再構築箇所を残す):**
 
-- `state.load.*` / `state.save.*` / `state.put.*` / `state.pop.*`(approval state 周辺の補助ログ、State/Audit 正式設計時に再評価)
+`state.load.*` / `state.save.*` / `state.put.*` / `state.pop.*` は `_debug_stage` 依存のため、単独で残せない。本チケットで削除するが、**削除箇所には TODO マーカーを残し、State/Audit 正式設計チケット(Phase2 完了後)で再構築する**。
+
+TODO マーカー規約:
+
+- 形式: `# TODO(state-audit-redesign): State/Audit Log として再構築 - <具体内容>`
+- `<marker>` 値は `state-audit-redesign` で統一(grep 可能性のため)
+- 例: `# TODO(state-audit-redesign): State/Audit Log として再構築 - approval state load 時の記録`
+- state 系以外の削除対象には TODO マーカーを付けない(新基盤で代替される、または不要なため)
+- 調査用ログにも TODO マーカーを付けない(`docs/logging.md` の「調査用ログの扱い」参照)
+
+削除前の git コミットは State/Audit 正式設計時の参照として残す(記録内容の詳細は git 履歴で確認可能)。
 
 **3. `_emit_runtime_error` の Notification 分岐の改修**
 
@@ -173,6 +183,8 @@
 
 本チケットの作業から派生する後続タスク。本チケットでは起票まで、実作業はしない。
 
+### ログ基盤の拡充
+
 - Operational 記録対象の本格棚卸し(Phase2 完了後)
 - ロガー共通モジュール導入 / 既存コードの置き換え
 - 構造化ログ化(JSON Lines)
@@ -182,3 +194,14 @@
 - **State/Audit Log の正式設計**(Phase2 完了後、`state.*` ログの再配置、破損検知、バックアップを含む。`docs/features/approval-state-reliability.md` の提案を入力として合流)
 - Notification アーカイブの要否判断
 - Web UI ログ API・閲覧 UI
+
+### 運用戦略(Phase2 完了後)
+
+完璧なルール遵守は現実的に不可能なため、**検出と定期クリーンアップで悪化を防ぐ戦略**を採る。以下は Phase2 完了後に落ち着いて設計する:
+
+- **定期クリーンアップチェックリストの整備**
+  (下書きとして `docs/features/cleanup-checklist-draft.md` が存在。Phase2 完了後に詳細化して正式ドキュメント化)
+- **ログ戦略の定期棚卸しの運用開始**
+  (頻度・テンプレート・運用ルールを確定させる)
+- **デバッグ出力検出フックの要否検討**
+  (pre-commit / CI での調査用ログ検出。実装するかどうかも含めて改めて設計)
