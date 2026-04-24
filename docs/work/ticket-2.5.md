@@ -46,7 +46,11 @@
 - **設定ロード成功**(旧 `_debug_stage('main.config_loaded')` に対応)
 - **hook runtime error**(旧 `_debug_exception` および `_emit_runtime_error` の本体)
 - **approval state 破損検知**(旧 `_recover_broken_state` の内部ログ)
-- `docs/logging.md` の「Operational Log 記録対象カタログ」にあるその他のエントリ
+  - **暫定対応の明示**: 本来は State/Audit + Operational の両方に記録すべきだが、Ticket 2.5 時点では State/Audit ハンドラが未実装のため、**Operational 側のみ記録を成立させる**
+  - `.broken` 退避処理は既存の挙動を維持する(state ファイルのリネーム保全)
+  - 退避処理箇所に `TODO(state-audit-redesign): State/Audit Log として記録` マーカーを残す
+  - State/Audit 側の本格記録は Phase2 完了後の正式設計チケットで実装する。Ticket 2.5 ではここを無理に完成させようとしない
+- `docs/logging.md` の「Operational Log 記録対象カタログ」にあるその他のエントリ(ただし `approval state 読み込み / 書き込み` 関連は保留、カタログ注記参照)
 
 書き直さないもの(= 削除のみ):
 
@@ -66,6 +70,8 @@ TODO マーカー規約:
 - state 系以外の削除対象には TODO マーカーを付けない(新基盤で代替される、または不要なため)
 - 調査用ログにも TODO マーカーを付けない(`docs/logging.md` の「調査用ログの扱い」参照)
 
+カタログ上の扱い: `docs/logging.md` の Operational Log 記録対象カタログに記載されている `approval state 読み込み / 書き込み失敗` 関連エントリ(`破損検知` を除く)は、**State/Audit 正式設計まで実装を保留**する。Ticket 2.5 では TODO マーカーのみ残し、カタログには「保留」と注記する(実装しない)。`破損検知` は Ticket 2.5 で実装する(旧 `_recover_broken_state` の昇格先として Operational に記録)。
+
 削除前の git コミットは State/Audit 正式設計時の参照として残す(記録内容の詳細は git 履歴で確認可能)。
 
 **3. `_emit_runtime_error` の Notification 分岐の改修**
@@ -73,10 +79,10 @@ TODO マーカー規約:
 現状の `_emit_runtime_error` は `dispatch_message(..., config.terminal)` に流す分岐を持ち、Notification と Operational が混線している。これを以下のように分離する:
 
 - Operational 側(ERROR): stack trace、error_type、error_message、event_type などの詳細
-- Notification 側: 要約のみ(`docs/logging.md` の「Notification への要約出力の規約」に従う)
-  - 「エージェント処理でエラーが発生した」程度の事実
-  - ユーザーが次に取るべき行動の示唆(例: 「詳細はログを確認してください」)
-  - 内部情報(stack trace、error_type、設定キー等)は出さない
+- Notification 側: 要約のみ(`docs/logging.md` の「hook runtime error のデフォルトテンプレート」に従う)
+  - デフォルト文言: `エラーが発生しました。詳細はログを確認してください。`
+  - このテンプレートを使うことを推奨。文脈に応じた微調整は logging.md の原則に従う(2文以内、内部情報を含めない)
+  - 内部情報(stack trace、error_type、設定キー等)は絶対に含めない
 
 **4. ログ基盤実装**
 
