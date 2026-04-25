@@ -11,9 +11,10 @@ from pathlib import Path
 from typing import Any
 
 from .classifier import ToolEvent, classify_event
-from .config import DEFAULT_LOG_PATH, load_config
+from .config import DEFAULT_CONFIG_PATH, DEFAULT_LOG_PATH, load_config
 from .dispatcher import dispatch_message
 from .formatter import format_message
+from .logging import LogKind, get_logger, initialize_logging
 from .messages import ApprovalMessage, FunhouMessage, LogMessage, utc_now
 
 APPROVAL_STATE_PATH = Path("/tmp/funhou-approval-state.json")
@@ -22,6 +23,7 @@ DEBUG_LOG_PATH = Path("/tmp/funhou-debug.log")
 # TEMP DEBUG: dedicated correlation log for approval matching investigation.
 CORRELATION_DEBUG_LOG_PATH = Path("/tmp/funhou-correlation-debug.log")
 INPUT_DEBUG_LOG_PATH = Path("/tmp/funhou-input-debug.log")
+RUNTIME_ERROR_NOTIFICATION = "エラーが発生しました。詳細はログを確認してください。"
 
 
 def main() -> int:
@@ -29,15 +31,15 @@ def main() -> int:
 
     payload: dict[str, Any] | None = None
     config: Any | None = None
+    initialize_logging()
     try:
+        config_path = _resolve_config_path()
         raw_stdin = _read_stdin_bytes()
-        _debug_raw_stdin(raw_stdin)
         payload = _read_payload(_decode_stdin_bytes(raw_stdin))
-        _debug_event_payload(payload)
-        _debug_stage("main.received", payload)
+        _log_hook_received(payload)
 
-        config = load_config(_resolve_config_path())
-        _debug_stage("main.config_loaded", payload)
+        config = load_config(config_path)
+        _log_config_loaded(config_path)
 
         messages = _build_messages(payload, config)
         _debug_stage(
@@ -64,7 +66,7 @@ def main() -> int:
         sys.stdout.write(json.dumps(response, ensure_ascii=True) + "\n")
         return 0
     except Exception as exc:
-        _debug_exception(payload, exc)
+        _log_runtime_error(exc, payload)
         _emit_runtime_error(exc, payload, config)
         raise
 
@@ -94,6 +96,39 @@ def _read_payload(raw: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("Hook stdin must be a JSON object.")
     return payload
+
+
+def _log_hook_received(payload: dict[str, Any]) -> None:
+    get_logger(LogKind.Operational).info(
+        "Hook received",
+        extra={"event_type": _event_type(payload), "source": "stdin"},
+    )
+
+
+def _log_config_loaded(path: Path | None) -> None:
+    config_path = path or DEFAULT_CONFIG_PATH
+    get_logger(LogKind.Operational).info(
+        "Config loaded",
+        extra={"config_path": str(config_path)},
+    )
+
+
+def _log_runtime_error(exc: Exception, payload: dict[str, Any] | None) -> None:
+    get_logger(LogKind.Operational).error(
+        "Hook runtime error",
+        extra={
+            "event_type": _event_type(payload),
+            "error_type": type(exc).__name__,
+            "error_message": str(exc),
+            "stack_trace": traceback.format_exc(),
+        },
+    )
+
+
+def _event_type(payload: dict[str, Any] | None) -> str:
+    if payload is None:
+        return "unknown"
+    return str(payload.get("hook_event_name") or "unknown")
 
 
 def _build_messages(payload: dict[str, Any], config: Any) -> list[FunhouMessage]:
@@ -522,15 +557,7 @@ def _recover_broken_state(raw_text: str, exc: Exception) -> None:
 
 
 def _debug_raw_stdin(raw: bytes) -> None:
-    record = {
-        "event": "stdin",
-        "byte_length": len(raw),
-        "bytes_hex": raw.hex(),
-        "utf8_text": raw.decode("utf-8", errors="backslashreplace"),
-    }
-    INPUT_DEBUG_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with INPUT_DEBUG_LOG_PATH.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(record, ensure_ascii=True, sort_keys=True) + "\n")
+    return
 
 
 def _debug_event_payload(payload: dict[str, Any]) -> None:
@@ -589,9 +616,7 @@ def _debug_exception(payload: dict[str, Any] | None, exc: Exception) -> None:
 
 
 def _append_debug_record(record: dict[str, Any]) -> None:
-    DEBUG_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with DEBUG_LOG_PATH.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(record, ensure_ascii=True, sort_keys=True) + "\n")
+    return
 
 
 def _debug_correlation(
@@ -607,21 +632,7 @@ def _debug_correlation(
 ) -> None:
     """TEMP DEBUG: make approval correlation decisions obvious in one place."""
 
-    record = {
-        "event": "correlation",
-        "hook_event_name": hook_event_name,
-        "session_id": payload.get("session_id"),
-        "tool_use_id": tool_use_id,
-        "fallback_key": fallback_key,
-        "tool_name": event.tool_name,
-        "target": event.target,
-        "decision": decision,
-        "matched_by": matched_by,
-        "result": result,
-    }
-    CORRELATION_DEBUG_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with CORRELATION_DEBUG_LOG_PATH.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(record, ensure_ascii=True, sort_keys=True) + "\n")
+    return
 
 
 def _put_pending_approval(
@@ -730,19 +741,19 @@ def _append_operational_log(message: LogMessage) -> None:
 
 
 def _emit_runtime_error(exc: Exception, payload: dict[str, Any] | None, config: Any | None) -> None:
-    target = "<unknown>"
-    if payload is not None:
-        tool_input = payload.get("tool_input")
-        if isinstance(tool_input, dict):
-            target = _extract_target(str(payload.get("tool_name") or "unknown"), tool_input)
-    message = _error_message(target, f"Hook runtime error: {type(exc).__name__}: {exc}")
+    message = _error_message("<runtime-error>", RUNTIME_ERROR_NOTIFICATION)
+    if config is None:
+        return
     try:
-        if config is not None:
-            dispatch_message(message, config.terminal)
-        else:
-            _append_operational_log(message)
-    except Exception:
-        _append_operational_log(message)
+        dispatch_message(message, config.terminal)
+    except Exception as dispatch_exc:
+        get_logger(LogKind.Operational).warning(
+            "Runtime error notification dispatch failed",
+            extra={
+                "event_type": _event_type(payload),
+                "reason": str(dispatch_exc),
+            },
+        )
 
 
 if __name__ == "__main__":
