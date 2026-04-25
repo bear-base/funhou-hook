@@ -264,5 +264,9 @@ def build_slack_payload(
 - payload 生成は Ticket 4' の `build_slack_payload()` を利用し、`mention_to` / `mention_on` を設定から渡す形にした。
 - Slack 送信失敗は `SlackDeliveryError` に統一し、HTTP status、短く切り詰めた response body、元例外を保持できるようにした。再試行・キューイング・dispatcher 継続判断はスコープ外として残している。
 - [tests/test_slack_sender.py](../../tests/test_slack_sender.py) を追加し、実ネットワークなしで POST リクエスト内容、メンション反映、HTTP 失敗、ネットワーク失敗、webhook 未設定を固定した。
-- 人間確認では `tests/test_config.py` / `tests/test_slack_formatter.py` / `tests/test_slack_sender.py` の関連テストが通過し、ruff の対象ファイルチェックも通過した。全体テストは既存の `/tmp/funhou-debug.log` 権限エラーで `test_hook_notifications.py` が失敗しているため、Ticket2 とは別途確認が必要。
+- 人間確認では `tests/test_config.py` / `tests/test_slack_formatter.py` / `tests/test_slack_sender.py` の関連テストが通過し、ruff の対象ファイルチェックも通過した。当時は既存の `/tmp/funhou-debug.log` 権限エラーで `test_hook_notifications.py` が失敗していたが、Ticket 2.5 で旧 debug ログ実装を撤去し解消済み。
 - Slack webhook URL と mention 先は `config/funhou.toml` ではなく git 管理外の `config/.env` から読む形に変更し、`config/.env.example` と `config/.env` の ignore 設定を追加した。ユーザー確認では `uv run pytest` と Slack 実機への `Slack webhook manual test` 投稿が通過した。
+
+### Ticket 2.5 : ログ戦略の整理とログ基盤の導入
+
+- 詳細は [ticket-2.5.md](./ticket-2.5.md) を参照する。
