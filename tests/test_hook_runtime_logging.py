@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+import funhou_hook.hook as hook
 from funhou_hook.hook import main
 from funhou_hook.logging import LogKind, get_logger, initialize_logging
 
@@ -41,8 +42,10 @@ def test_runtime_error_uses_operational_details_and_notification_summary(
     correlation_debug_log_path = runtime_dir / "funhou-correlation-debug.log"
     debug_log_path.write_text("existing debug\n", encoding="utf-8")
     input_debug_log_path.write_text("existing input\n", encoding="utf-8")
+    correlation_debug_log_path.write_text("existing correlation\n", encoding="utf-8")
     debug_size = debug_log_path.stat().st_size
     input_debug_size = input_debug_log_path.stat().st_size
+    correlation_debug_size = correlation_debug_log_path.stat().st_size
 
     config_path.write_text(
         f"""
@@ -69,9 +72,6 @@ levels = ["info", "warning", "danger", "error"]
         "funhou_hook.hook.initialize_logging",
         lambda: initialize_logging(operational_log_path),
     )
-    monkeypatch.setattr("funhou_hook.hook.DEBUG_LOG_PATH", debug_log_path)
-    monkeypatch.setattr("funhou_hook.hook.INPUT_DEBUG_LOG_PATH", input_debug_log_path)
-    monkeypatch.setattr("funhou_hook.hook.CORRELATION_DEBUG_LOG_PATH", correlation_debug_log_path)
 
     with pytest.raises(ValueError, match="boom"):
         main()
@@ -95,4 +95,35 @@ levels = ["info", "warning", "danger", "error"]
 
     assert debug_log_path.stat().st_size == debug_size
     assert input_debug_log_path.stat().st_size == input_debug_size
-    assert not correlation_debug_log_path.exists()
+    assert correlation_debug_log_path.stat().st_size == correlation_debug_size
+
+
+def test_legacy_debug_paths_are_removed_from_hook_module() -> None:
+    assert not hasattr(hook, "DEBUG_LOG_PATH")
+    assert not hasattr(hook, "INPUT_DEBUG_LOG_PATH")
+    assert not hasattr(hook, "CORRELATION_DEBUG_LOG_PATH")
+
+
+def test_broken_approval_state_is_backed_up_and_logged(
+    runtime_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_path = runtime_dir / "funhou-approval-state.json"
+    broken_path = runtime_dir / "funhou-approval-state.json.broken"
+    operational_log_path = runtime_dir / "operational.log"
+    state_path.write_text("{invalid", encoding="utf-8")
+    initialize_logging(operational_log_path)
+    monkeypatch.setattr("funhou_hook.hook.APPROVAL_STATE_PATH", state_path)
+    monkeypatch.setattr("funhou_hook.hook.BROKEN_STATE_PATH", broken_path)
+
+    state = hook._load_pending_approvals()
+
+    assert state == {}
+    assert broken_path.read_text(encoding="utf-8") == "{invalid"
+    assert state_path.read_text(encoding="utf-8") == "{}"
+    operational_log = operational_log_path.read_text(encoding="utf-8")
+    assert "[ERROR] Approval state corruption detected" in operational_log
+    assert "state_id=" in operational_log
+    assert state_path.name in operational_log
+    assert broken_path.name in operational_log
+    assert "JSONDecodeError" in operational_log
