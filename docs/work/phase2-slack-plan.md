@@ -79,9 +79,10 @@
 - 完了条件
   Hook が生成した 1 件の `FunhouMessage` を terminal と slack に独立して配送できる。
   Slack が無効なら terminal のみ動作する。
-  `SummaryMessage` は level ではなく channel ごとの message type 設定で配送有無を切り替えられる。
+  `SummaryMessage` は level を持たず、channel ごとの message type 設定で配送有無を切り替えられる。
   `LogMessage` / `ApprovalMessage` は message type と level の両方を尊重して配送できる。
   Slack 配送失敗時も terminal 出力が失われないことをユニットテストで確認できる。
+  terminal 配送失敗は hook 全体の失敗として扱い、slack 配送失敗は hook 全体の失敗にしないことがコードとテストで明確になっている。
 - スコープ外
   Slack 表示文面の詳細改善
   サマリー生成そのもの
@@ -92,9 +93,16 @@
 #### Ticket 3 の追加設計メモ
 
 - `summary` は全チャネル一律配信ではなく、チャネルごとに出し分ける。これを `levels` に無理に載せず、`message_types` のような購読設定をチャネル設定に追加して制御する想定にする。
+- `SummaryMessage` には level の概念を持たせない。summary は危険度通知ではなく要約メッセージとして扱い、配送判定は `message_types` のみで行う。
 - `LogMessage` / `ApprovalMessage` は `message_types` と `levels` の両方で配送判定する。
 - `SummaryMessage` は `message_types` のみで配送判定する。
 - たとえば terminal は `log, approval, summary`、Slack は `approval, summary` のように channel ごとの差を設定できる形を目標にする。
+- `message_types` は個別フラグ(`summary_enabled` など)ではなく、各チャネル設定に素直に持たせる。対象は `TerminalChannelConfig` / `SlackChannelConfig` の両方とし、将来のチャネル追加でも同じ概念で横展開できる形を優先する。
+- Slack 配送失敗ログは Notification に混ぜず、[docs/logging.md](../logging.md) に従って Operational Log に記録する。
+- リトライ未実装の Ticket 3 時点では、Slack 配送失敗は実装上すべて `ERROR` として Operational Log に記録する。
+- 将来リトライを導入する場合は、`docs/logging.md` の方針に合わせて `WARN`(リトライ中) / `ERROR`(最終失敗) に分ける前提とする。
+- terminal は最小保証チャネルとして扱い、terminal 配送失敗は hook 全体の失敗にする。
+- slack は付加チャネルとして扱い、slack 配送失敗は hook 全体の失敗にせず、Operational Log に記録して処理を継続する。
 
 ### Ticket 4: Slack 上の表示ポリシーを message type ごとに定義して実装する
 
