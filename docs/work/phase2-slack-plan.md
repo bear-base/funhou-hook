@@ -278,3 +278,13 @@ def build_slack_payload(
 ### Ticket 2.5 : ログ戦略の整理とログ基盤の導入
 
 - 詳細は [ticket-2.5.md](./ticket-2.5.md) を参照する。
+
+### Ticket 3 : Dispatcher の複数チャネル配信対応
+
+- [src/funhou_hook/config.py](../../src/funhou_hook/config.py) に `message_types` を追加し、terminal / slack の両チャネルで `log` / `summary` / `approval` の購読対象を設定できるようにした。
+- [src/funhou_hook/dispatcher.py](../../src/funhou_hook/dispatcher.py) の `dispatch_message()` を複数チャネル前提に拡張し、terminal と slack へ 1 回の呼び出しでファンアウトできるようにした。
+- `LogMessage` / `ApprovalMessage` は `message_types` と `levels` の両方で配送判定し、`SummaryMessage` は level を持たない前提で `message_types` のみで配送判定するようにした。
+- terminal は最小保証チャネルとして扱い、terminal 配送失敗は例外として hook 全体を失敗させる一方、slack 配送失敗は [docs/logging.md](../logging.md) に従って Operational Log に記録し、hook 処理は継続するようにした。
+- [src/funhou_hook/hook.py](../../src/funhou_hook/hook.py) から新しい dispatcher API を呼ぶように変更し、通常の message 配送と runtime error 時の notification 配送の両方を同じ複数チャネル経路に揃えた。
+- [tests/test_dispatcher.py](../../tests/test_dispatcher.py) を追加し、`message_types` / `levels` による配送判定、`SummaryMessage` の扱い、terminal fatal / slack non-fatal の failure policy、Operational Log 記録を固定した。
+- [tests/test_hook_dispatch_integration.py](../../tests/test_hook_dispatch_integration.py) を追加し、`main()` から terminal / slack への fan-out、slack 配送失敗時の継続、response JSON の返却を integration テストで固定した。
