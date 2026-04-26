@@ -38,7 +38,7 @@ def main() -> int:
         messages = _build_messages(payload, config)
 
         for message in messages:
-            dispatch_message(message, config.terminal)
+            dispatch_message(message, config.terminal, config.slack)
 
         response = {"event": str(payload.get("hook_event_name") or "unknown")}
         if messages:
@@ -503,7 +503,7 @@ def _emit_runtime_error(exc: Exception, payload: dict[str, Any] | None, config: 
     if config is None:
         return
     try:
-        dispatch_message(message, config.terminal)
+        dispatch_message(message, config.terminal, config.slack)
     except Exception as dispatch_exc:
         get_logger(LogKind.Operational).warning(
             "Runtime error notification dispatch failed",
