@@ -14,7 +14,7 @@ try:
 except ModuleNotFoundError:
     dotenv_values = None
 
-from .messages import Level
+from .messages import Level, MessageType
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = PACKAGE_ROOT / "config" / "funhou.toml"
@@ -22,6 +22,7 @@ DEFAULT_ENV_PATH = PACKAGE_ROOT / "config" / ".env"
 DEFAULT_LOG_PATH = Path("/tmp/funhou.log")
 DEFAULT_LEVELS = ("info", "warning", "danger", "error")
 DEFAULT_MENTION_LEVELS = ("warning", "danger")
+DEFAULT_MESSAGE_TYPES = ("log", "summary", "approval")
 SLACK_WEBHOOK_ENV = "SLACK_WEBHOOK_URL"
 SLACK_MENTION_TO_ENV = "SLACK_MENTION_TO"
 
@@ -40,6 +41,7 @@ class TerminalChannelConfig:
 
     output: Path
     levels: tuple[Level, ...]
+    message_types: tuple[MessageType, ...] = DEFAULT_MESSAGE_TYPES
 
 
 @dataclass(slots=True, frozen=True)
@@ -49,6 +51,7 @@ class SlackChannelConfig:
     enabled: bool = False
     webhook: str | None = None
     levels: tuple[Level, ...] = DEFAULT_LEVELS
+    message_types: tuple[MessageType, ...] = DEFAULT_MESSAGE_TYPES
     mention_on: tuple[Level, ...] = DEFAULT_MENTION_LEVELS
     mention_to: str | None = None
 
@@ -72,8 +75,18 @@ def _coerce_level(value: str) -> Level:
     return value
 
 
+def _coerce_message_type(value: str) -> MessageType:
+    if value not in set(DEFAULT_MESSAGE_TYPES):
+        raise ValueError(f"Unsupported message type: {value}")
+    return value
+
+
 def _coerce_levels(values: list[str] | tuple[str, ...]) -> tuple[Level, ...]:
     return tuple(_coerce_level(value) for value in values)
+
+
+def _coerce_message_types(values: list[str] | tuple[str, ...]) -> tuple[MessageType, ...]:
+    return tuple(_coerce_message_type(value) for value in values)
 
 
 def _coerce_optional_string(value: Any) -> str | None:
@@ -86,18 +99,22 @@ def _coerce_optional_string(value: Any) -> str | None:
 def _load_channel(data: dict[str, Any]) -> TerminalChannelConfig:
     output = Path(data.get("output", DEFAULT_LOG_PATH))
     raw_levels = data.get("levels", list(DEFAULT_LEVELS))
+    raw_message_types = data.get("message_types", list(DEFAULT_MESSAGE_TYPES))
     levels = _coerce_levels(raw_levels)
-    return TerminalChannelConfig(output=output, levels=levels)
+    message_types = _coerce_message_types(raw_message_types)
+    return TerminalChannelConfig(output=output, levels=levels, message_types=message_types)
 
 
 def _load_slack_channel(data: dict[str, Any], env: Mapping[str, str]) -> SlackChannelConfig:
     enabled = bool(data.get("enabled", False))
     webhook = _coerce_optional_string(env.get(SLACK_WEBHOOK_ENV))
     raw_levels = data.get("levels", list(DEFAULT_LEVELS))
+    raw_message_types = data.get("message_types", list(DEFAULT_MESSAGE_TYPES))
     raw_mention_levels = data.get("mention_on", list(DEFAULT_MENTION_LEVELS))
     mention_to = _coerce_optional_string(env.get(SLACK_MENTION_TO_ENV))
 
     levels = _coerce_levels(raw_levels)
+    message_types = _coerce_message_types(raw_message_types)
     mention_on = _coerce_levels(raw_mention_levels)
 
     if enabled and webhook is None:
@@ -107,6 +124,7 @@ def _load_slack_channel(data: dict[str, Any], env: Mapping[str, str]) -> SlackCh
         enabled=enabled,
         webhook=webhook,
         levels=levels,
+        message_types=message_types,
         mention_on=mention_on,
         mention_to=mention_to,
     )
