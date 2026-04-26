@@ -48,10 +48,12 @@ level = "warning"
 [channels.terminal]
 output = "/tmp/custom-funhou.log"
 levels = ["info", "warning"]
+message_types = ["log", "summary"]
 
 [channels.slack]
 enabled = true
 levels = ["warning", "danger", "error"]
+message_types = ["approval", "summary"]
 mention_on = ["danger", "error"]
 """.strip(),
         encoding="utf-8",
@@ -61,9 +63,11 @@ mention_on = ["danger", "error"]
 
     assert config.terminal.output == Path("/tmp/custom-funhou.log")
     assert config.terminal.levels == ("info", "warning")
+    assert config.terminal.message_types == ("log", "summary")
     assert config.slack.enabled is True
     assert config.slack.webhook == "https://hooks.slack.com/services/T000/B000/XXXX"
     assert config.slack.levels == ("warning", "danger", "error")
+    assert config.slack.message_types == ("approval", "summary")
     assert config.slack.mention_on == ("danger", "error")
     assert config.slack.mention_to == "@team"
 
@@ -92,6 +96,8 @@ mention_on = ["warning"]
     assert config.slack.enabled is False
     assert config.slack.webhook is None
     assert config.slack.levels == ("info", "warning")
+    assert config.terminal.message_types == ("log", "summary", "approval")
+    assert config.slack.message_types == ("log", "summary", "approval")
     assert config.slack.mention_on == ("warning",)
 
 
@@ -141,6 +147,48 @@ levels = ["info", "noisy"]
     )
 
     with pytest.raises(ValueError, match="Unsupported level: noisy"):
+        load_config(config_path)
+
+
+def test_load_config_rejects_invalid_terminal_message_type(
+    config_dir: Path,
+) -> None:
+    config_path = config_dir / "funhou.toml"
+    config_path.write_text(
+        """
+[channels.terminal]
+output = "/tmp/funhou.log"
+message_types = ["log", "digest"]
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Unsupported message type: digest"):
+        load_config(config_path)
+
+
+def test_load_config_rejects_invalid_slack_message_type(
+    config_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = config_dir / "funhou.toml"
+    monkeypatch.setattr(
+        "funhou_hook.config._load_env",
+        lambda path: {"SLACK_WEBHOOK_URL": "https://hooks.slack.com/services/T000/B000/XXXX"},
+    )
+    config_path.write_text(
+        """
+[channels.terminal]
+output = "/tmp/funhou.log"
+
+[channels.slack]
+enabled = true
+message_types = ["approval", "status"]
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Unsupported message type: status"):
         load_config(config_path)
 
 
