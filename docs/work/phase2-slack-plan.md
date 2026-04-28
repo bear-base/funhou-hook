@@ -128,29 +128,43 @@
 - 後続セッションで渡せる指示文ドラフト
   `Slack での見え方だけに集中して、log/approval/summary の message type ごとの表示ポリシーを実装してください。warning/danger でのメンション、approval の強調、summary の簡潔表示をテストで固定し、terminal formatter とは責務を分けてください。`
 
-### Ticket 5: テスト基盤と運用ドキュメントを整え、人間が外部確認しやすい状態にする
+### Ticket 5: Phase2 Slack連携の総合テストを実施する
 
 - ゴール
-  サンドボックス内ではユニットテストで担保し、サンドボックス外では人間が Slack 実機確認しやすい形にする。
+  Ticket 4' / Ticket 1 / Ticket 2 / Ticket 2.5 / Ticket 3 の実装結果を前提に、Phase2 Slack連携が一通りつながっていることを総合テストで確認し、Phase2 の完了判定ができる状態にする。
+  正式な README / docs 統合は Phase2 後作業に回し、Ticket 5 では総合テストを再実施するために必要な最小限の Slack 実機確認メモだけを副産物として残す。
+
 - 入力と出力
   入力:
-  Ticket 1-4 の実装結果
+  Ticket 4' / Ticket 1 / Ticket 2 / Ticket 2.5 / Ticket 3 の実装結果
   既存テスト群
-  必要なら README または `docs/work` 配下の補助文書
+  `config/.env.example`
+  `config/funhou.toml`
+  必要なら `docs/work` 配下の補助文書
+
   出力:
-  設定例
-  手動確認手順
-  Slack 連携のユニットテスト追加
+  Phase2 Slack連携の総合テスト結果
+  不足していた場合の最小限の追加テスト
+  Slack 実機確認のための最小手順メモ
+  Phase2 後に README / docs へ統合するための TODO
+
 - 完了条件
-  Slack 連携の正常系/設定未指定/HTTP失敗/レベルフィルタがユニットテストで確認できる。
-  人間が `config/funhou.toml` をどう書き、何を見ればよいかが文書化されている。
-  手動確認は webhook 実送信に限定され、実装チケット側は外部環境なしで完了判定できる。
+  既存テスト全体が通過し、Phase2 実装によって既存の terminal 動作が壊れていないことを確認できる。
+  Slack 連携の正常系 / Slack disabled / Slack enabled 時の webhook 未設定 / HTTP 失敗 / level filter / message_types filter が、既存または追加テストで確認できる。
+  hook から dispatcher、terminal、Slack sender までの経路が総合的に確認できる。
+  Slack 配送失敗時も terminal 出力が継続し、Operational Log に失敗情報が残ることを確認できる。
+  Slack 実送信を人間が確認するための最小手順メモが `docs/work` などに残っている。
+  README / docs への正式統合は行わず、Phase2 後作業として切り出されている。
+
 - スコープ外
+  README への正式統合
+  docs 全体の再構成
+  新規メンバー向け導入ガイドの完成
+  詳細なトラブルシュート集の作成
   本番運用の監視基盤
   Slack Bot トークンや双方向連携の説明
   summary エンジンの利用説明
-- 後続セッションで渡せる指示文ドラフト
-  `Phase2 Slack 連携のユニットテストと最小ドキュメントを整備してください。サンドボックス内では HTTP モック中心で完結させ、外部の Slack 実機確認は人間が行えるように、設定例と確認観点を README か docs に追加してください。`
+  リトライ / キューイング / Slack 返信処理の実装
 
 ## 依存関係と推奨順序
 
@@ -268,6 +282,7 @@ def build_slack_payload(
 - [config/funhou.toml](../../config/funhou.toml) に disabled な `channels.slack` サンプルを追加済みなので、Ticket 2 以降はこの設定モデルを前提に Webhook 送信実装へ進めてよい。
 
 ### Ticket 2 : Slack 送信アダプターの実装
+
 - [src/funhou_hook/slack_sender.py](../../src/funhou_hook/slack_sender.py) を追加し、`send_slack_message()` で `FunhouMessage` と `SlackChannelConfig` から Slack Incoming Webhook へ単発 POST できるようにした。
 - payload 生成は Ticket 4' の `build_slack_payload()` を利用し、`mention_to` / `mention_on` を設定から渡す形にした。
 - Slack 送信失敗は `SlackDeliveryError` に統一し、HTTP status、短く切り詰めた response body、元例外を保持できるようにした。再試行・キューイング・dispatcher 継続判断はスコープ外として残している。
