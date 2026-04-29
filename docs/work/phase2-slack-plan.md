@@ -303,3 +303,13 @@ def build_slack_payload(
 - [src/funhou_hook/hook.py](../../src/funhou_hook/hook.py) から新しい dispatcher API を呼ぶように変更し、通常の message 配送と runtime error 時の notification 配送の両方を同じ複数チャネル経路に揃えた。
 - [tests/test_dispatcher.py](../../tests/test_dispatcher.py) を追加し、`message_types` / `levels` による配送判定、`SummaryMessage` の扱い、terminal fatal / slack non-fatal の failure policy、Operational Log 記録を固定した。
 - [tests/test_hook_dispatch_integration.py](../../tests/test_hook_dispatch_integration.py) を追加し、`main()` から terminal / slack への fan-out、slack 配送失敗時の継続、response JSON の返却を integration テストで固定した。
+
+### Ticket 5 : Phase2 Slack連携の総合テスト準備
+
+- [tests/test_phase2_slack_integration.py](../../tests/test_phase2_slack_integration.py) を追加し、Slack 実送信なしで Phase2 Slack 連携の縦断回帰テストを固定した。
+- 自動テストでは、Slack disabled、Slack enabled + env webhook、webhook 未設定、level filter、message_types filter、Slack 配送失敗時の terminal 継続と Operational Log 記録を確認する。
+- `ApprovalMessage` は dispatcher から Slack sender まで到達し、`mention_to` / `mention_on` が sender に渡ることを確認する。
+- `SummaryMessage` は Ticket 5 時点では hook から生成しない。手動生成した `SummaryMessage` を dispatcher に渡した場合に terminal / Slack へ配送できることのみ確認し、サマリー生成エンジン、生成トリガー、LLM 呼び出しは後続 TODO とする。
+- [docs/work/phase2-slack-regression-test.md](./phase2-slack-regression-test.md) を追加し、人間が Slack 実機で確認するための回帰テスト仕様を整理した。
+- Slack 実機テストは webhook URL と Slack user ID などの認証系情報を必要とするため、人間が実施する。自動テストでは monkeypatch による fake sender のみを使う。
+- README への正式反映は、Phase2 全体の実績をフィードバックして書き直す後続作業とし、Ticket 5 では扱わない。
