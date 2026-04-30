@@ -32,4 +32,5 @@ levels = ["info", "warning", "danger", "error"]
 [channels.slack]
 enabled = false
 levels = ["info", "warning", "danger", "error"]
+message_types = ["log", "summary", "approval"]
 mention_on = ["warning", "danger"]
