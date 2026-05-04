@@ -30,7 +30,7 @@ output = "/tmp/funhou.log"
 levels = ["info", "warning", "danger", "error"]
 
 [channels.slack]
-enabled = false
+enabled = true
 levels = ["info", "warning", "danger", "error"]
 message_types = ["log", "summary", "approval"]
 mention_on = ["warning", "danger"]

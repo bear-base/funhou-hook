@@ -6,10 +6,6 @@ from datetime import timedelta
 
 from .messages import ApprovalMessage, FunhouMessage, Level, LogMessage, SummaryMessage
 
-LOG_ICONS: dict[str, str] = {
-    "Read": "📄",
-    "Bash": "🔨",
-}
 LEVEL_ICONS: dict[Level, str] = {
     "info": "ℹ️",
     "warning": "⚠️",
@@ -44,14 +40,22 @@ def _build_log_payload(
     mention_to: str | None,
     mention_levels: set[Level],
 ) -> dict:
-    icon = LOG_ICONS.get(message.tool, LEVEL_ICONS[message.level])
+    icon = LEVEL_ICONS[message.level]
+    detail = _format_log_detail(message)
     text = _prefix_mention(
-        f"{icon} {message.message}",
+        f"{icon} *{message.tool}* `{message.target}`{detail}",
         level=message.level,
         mention_to=mention_to,
         mention_levels=mention_levels,
     )
     return {"text": text}
+
+
+def _format_log_detail(message: LogMessage) -> str:
+    default_message = f"{message.tool} {message.target}"
+    if not message.message or message.message == default_message:
+        return ""
+    return f" {message.message}"
 
 
 def _build_summary_payload(message: SummaryMessage) -> dict:

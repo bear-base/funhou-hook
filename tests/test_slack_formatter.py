@@ -17,7 +17,7 @@ def test_build_slack_payload_renders_log_message_as_single_line_text() -> None:
 
     payload = build_slack_payload(message)
 
-    assert payload == {"text": "📄 Read src/config.ts"}
+    assert payload == {"text": "ℹ️ *Read* `src/config.ts`"}
 
 
 def test_build_slack_payload_prefixes_mentions_for_matching_log_levels() -> None:
@@ -35,7 +35,7 @@ def test_build_slack_payload_prefixes_mentions_for_matching_log_levels() -> None
         mention_levels={"warning", "danger"},
     )
 
-    assert payload == {"text": "@you 🔨 Bash npm run build"}
+    assert payload == {"text": "@you ⚠️ *Bash* `npm run build`"}
 
 
 def test_build_slack_payload_renders_summary_message_as_blocks() -> None:
@@ -132,7 +132,7 @@ def test_build_slack_payload_does_not_add_mention_when_level_is_not_selected() -
         mention_levels={"warning", "danger"},
     )
 
-    assert payload == {"text": "📄 Read src/config.ts"}
+    assert payload == {"text": "ℹ️ *Read* `src/config.ts`"}
 
 
 def test_build_slack_payload_does_not_add_mention_when_mention_target_is_missing() -> None:
@@ -150,7 +150,7 @@ def test_build_slack_payload_does_not_add_mention_when_mention_target_is_missing
         mention_levels={"warning", "danger"},
     )
 
-    assert payload == {"text": "🔨 Bash npm run build"}
+    assert payload == {"text": "⚠️ *Bash* `npm run build`"}
 
 
 def test_build_slack_payload_uses_level_icon_for_unknown_tool_names() -> None:
@@ -164,7 +164,7 @@ def test_build_slack_payload_uses_level_icon_for_unknown_tool_names() -> None:
 
     payload = build_slack_payload(message)
 
-    assert payload == {"text": "❌ Hook runtime error"}
+    assert payload == {"text": "❌ *Hook* `src/config.ts` Hook runtime error"}
 
 
 def test_build_slack_payload_renders_approval_without_mention_when_not_requested() -> None:
