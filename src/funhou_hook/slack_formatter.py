@@ -7,10 +7,10 @@ from datetime import timedelta
 from .messages import ApprovalMessage, FunhouMessage, Level, LogMessage, SummaryMessage
 
 LEVEL_ICONS: dict[Level, str] = {
-    "info": "ℹ️",
+    "info": "🔹",
     "warning": "⚠️",
-    "danger": "🔴",
-    "error": "❌",
+    "danger": "⚡",
+    "error": "🚨",
 }
 
 
@@ -41,9 +41,10 @@ def _build_log_payload(
     mention_levels: set[Level],
 ) -> dict:
     icon = LEVEL_ICONS[message.level]
+    body = _format_log_body(message)
     detail = _format_log_detail(message)
     text = _prefix_mention(
-        f"{icon} *{message.tool}* `{message.target}`{detail}",
+        f"{icon} {body}{detail}",
         level=message.level,
         mention_to=mention_to,
         mention_levels=mention_levels,
@@ -51,11 +52,41 @@ def _build_log_payload(
     return {"text": text}
 
 
+def _format_log_body(message: LogMessage) -> str:
+    if _is_multiline(message.target):
+        return f"*{message.tool}*\n```{message.target}```"
+    return f"*{message.tool}* `{message.target}`"
+
+
 def _format_log_detail(message: LogMessage) -> str:
     default_message = f"{message.tool} {message.target}"
-    if not message.message or message.message == default_message:
+    detail = _remove_repeated_target(message.message, default_message)
+    if not detail:
         return ""
-    return f" {message.message}"
+    return f" {detail}"
+
+
+def _remove_repeated_target(message: str, default_message: str) -> str:
+    if not message or message == default_message:
+        return ""
+
+    replacements = (
+        (f"Completed {default_message}", "Completed"),
+        (f"Approval granted: {default_message}", "Approval granted"),
+        (f"Approval denied: {default_message}", "Approval denied"),
+        (f"Denied: {default_message}", "Denied"),
+        (f"Failed {default_message}: ", "Failed: "),
+    )
+    for prefix, replacement in replacements:
+        if message == prefix:
+            return replacement
+        if message.startswith(prefix):
+            return f"{replacement}{message.removeprefix(prefix)}"
+    return message
+
+
+def _is_multiline(value: str) -> bool:
+    return "\n" in value or "\r" in value
 
 
 def _build_summary_payload(message: SummaryMessage) -> dict:
@@ -89,7 +120,7 @@ def _build_approval_payload(
     mention_levels: set[Level],
 ) -> dict:
     title = _prefix_mention(
-        "🔴 承認待ち",
+        "⚡ 承認待ち",
         level=message.level,
         mention_to=mention_to,
         mention_levels=mention_levels,
@@ -109,13 +140,6 @@ def _build_approval_payload(
                     "text": f"*理由:* {message.reason}\n*コマンド:* `{message.command}`",
                 },
             },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": "Slack上では承認できません。Phase 3 までは別経路で判断してください。",
-                },
-            },
         ],
     }
 
@@ -133,8 +157,8 @@ def _prefix_mention(
 
 
 def _format_approval_heading(title: str) -> str:
-    if title.startswith("🔴 "):
-        return title.replace("🔴 承認待ち", "🔴 *承認待ち*", 1)
+    if title.startswith("⚡ "):
+        return title.replace("⚡ 承認待ち", "⚡ *承認待ち*", 1)
     return title.replace("承認待ち", "*承認待ち*", 1)
 
 

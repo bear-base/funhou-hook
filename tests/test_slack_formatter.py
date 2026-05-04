@@ -17,7 +17,7 @@ def test_build_slack_payload_renders_log_message_as_single_line_text() -> None:
 
     payload = build_slack_payload(message)
 
-    assert payload == {"text": "ℹ️ *Read* `src/config.ts`"}
+    assert payload == {"text": "🔹 *Read* `src/config.ts`"}
 
 
 def test_build_slack_payload_prefixes_mentions_for_matching_log_levels() -> None:
@@ -36,6 +36,34 @@ def test_build_slack_payload_prefixes_mentions_for_matching_log_levels() -> None
     )
 
     assert payload == {"text": "@you ⚠️ *Bash* `npm run build`"}
+
+
+def test_build_slack_payload_renders_multiline_log_target_as_code_block() -> None:
+    message = LogMessage(
+        timestamp=datetime(2026, 4, 9, 10, 7, tzinfo=UTC),
+        level="warning",
+        tool="Bash",
+        target="npm test\nnpm run lint",
+        message="Bash npm test\nnpm run lint",
+    )
+
+    payload = build_slack_payload(message)
+
+    assert payload == {"text": "⚠️ *Bash*\n```npm test\nnpm run lint```"}
+
+
+def test_build_slack_payload_does_not_repeat_target_in_log_detail() -> None:
+    message = LogMessage(
+        timestamp=datetime(2026, 4, 9, 10, 7, tzinfo=UTC),
+        level="info",
+        tool="Bash",
+        target="npm test",
+        message="Completed Bash npm test",
+    )
+
+    payload = build_slack_payload(message)
+
+    assert payload == {"text": "🔹 *Bash* `npm test` Completed"}
 
 
 def test_build_slack_payload_renders_summary_message_as_blocks() -> None:
@@ -89,13 +117,13 @@ def test_build_slack_payload_renders_approval_message_with_mention_and_blocks() 
     )
 
     assert payload["text"] == (
-        "@you 🔴 承認待ち: 本番DBへのマイグレーション実行 "
+        "@you ⚡ 承認待ち: 本番DBへのマイグレーション実行 "
         "(Bash npx prisma migrate deploy)"
     )
     assert payload["blocks"] == [
         {
             "type": "section",
-            "text": {"type": "mrkdwn", "text": "@you 🔴 *承認待ち*"},
+            "text": {"type": "mrkdwn", "text": "@you ⚡ *承認待ち*"},
         },
         {
             "type": "section",
@@ -105,13 +133,6 @@ def test_build_slack_payload_renders_approval_message_with_mention_and_blocks() 
                     "*理由:* 本番DBへのマイグレーション実行\n"
                     "*コマンド:* `npx prisma migrate deploy`"
                 ),
-            },
-        },
-        {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": "Slack上では承認できません。Phase 3 までは別経路で判断してください。",
             },
         },
     ]
@@ -132,7 +153,7 @@ def test_build_slack_payload_does_not_add_mention_when_level_is_not_selected() -
         mention_levels={"warning", "danger"},
     )
 
-    assert payload == {"text": "ℹ️ *Read* `src/config.ts`"}
+    assert payload == {"text": "🔹 *Read* `src/config.ts`"}
 
 
 def test_build_slack_payload_does_not_add_mention_when_mention_target_is_missing() -> None:
@@ -164,7 +185,7 @@ def test_build_slack_payload_uses_level_icon_for_unknown_tool_names() -> None:
 
     payload = build_slack_payload(message)
 
-    assert payload == {"text": "❌ *Hook* `src/config.ts` Hook runtime error"}
+    assert payload == {"text": "🚨 *Hook* `src/config.ts` Hook runtime error"}
 
 
 def test_build_slack_payload_renders_approval_without_mention_when_not_requested() -> None:
@@ -179,12 +200,12 @@ def test_build_slack_payload_renders_approval_without_mention_when_not_requested
     payload = build_slack_payload(message)
 
     assert payload["text"] == (
-        "🔴 承認待ち: 本番DBへのマイグレーション実行 "
+        "⚡ 承認待ち: 本番DBへのマイグレーション実行 "
         "(Bash npx prisma migrate deploy)"
     )
     assert payload["blocks"][0] == {
         "type": "section",
-        "text": {"type": "mrkdwn", "text": "🔴 *承認待ち*"},
+        "text": {"type": "mrkdwn", "text": "⚡ *承認待ち*"},
     }
 
 

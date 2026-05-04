@@ -54,7 +54,7 @@ def test_send_slack_message_posts_json_payload(monkeypatch: pytest.MonkeyPatch) 
     assert request.get_method() == "POST"
     assert request.headers["Content-type"] == "application/json; charset=utf-8"
     assert request.headers["User-agent"] == "funhou-hook"
-    assert request.data == '{"text":"ℹ️ *Read* `src/config.ts`"}'.encode()
+    assert request.data == '{"text":"🔹 *Read* `src/config.ts`"}'.encode()
     assert captured["timeout"] == 5.0
 
 

@@ -175,9 +175,7 @@ def _handle_permission_request(payload: dict[str, Any]) -> list[FunhouMessage]:
     _put_pending_approval(save_key, save_mode, session_id, event)
 
     description = _extract_description(payload)
-    message = f"Permission requested: {event.tool_name} {event.target}"
-    if description:
-        message = f"{message} ({description})"
+    message = description or "Permission requested"
     messages.append(
         ApprovalMessage(
             timestamp=utc_now(),
@@ -228,18 +226,7 @@ def _build_post_tool_use_messages(payload: dict[str, Any]) -> list[FunhouMessage
     messages: list[FunhouMessage] = []
 
     tool_use_id, fallback_key = _extract_correlation_keys(payload, event)
-    pending, _matched_by = _pop_pending_approval(tool_use_id, fallback_key)
-
-    if pending is not None:
-        messages.append(
-            LogMessage(
-                timestamp=utc_now(),
-                level="info",
-                tool=event.tool_name,
-                target=event.target,
-                message=f"Approval granted: {event.tool_name} {event.target}",
-            )
-        )
+    _pending, _matched_by = _pop_pending_approval(tool_use_id, fallback_key)
 
     messages.append(
         LogMessage(
@@ -258,19 +245,8 @@ def _build_post_tool_failure_messages(payload: dict[str, Any]) -> list[FunhouMes
     messages: list[FunhouMessage] = []
 
     tool_use_id, fallback_key = _extract_correlation_keys(payload, event)
-    pending, _matched_by = _pop_pending_approval(tool_use_id, fallback_key)
+    _pending, _matched_by = _pop_pending_approval(tool_use_id, fallback_key)
     error = _extract_error(payload)
-
-    if pending is not None:
-        messages.append(
-            LogMessage(
-                timestamp=utc_now(),
-                level="info",
-                tool=event.tool_name,
-                target=event.target,
-                message=f"Approval granted: {event.tool_name} {event.target}",
-            )
-        )
 
     messages.append(
         LogMessage(

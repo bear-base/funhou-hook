@@ -110,7 +110,7 @@ def test_post_tool_failure_without_pending_is_treated_as_normal_failure() -> Non
     )
 
 
-def test_post_tool_use_with_pending_still_emits_approval_granted_and_completed() -> None:
+def test_post_tool_use_with_pending_emits_only_completed() -> None:
     payload = {
         "hook_event_name": "PostToolUse",
         "tool_name": "Edit",
@@ -125,14 +125,9 @@ def test_post_tool_use_with_pending_still_emits_approval_granted_and_completed()
     ):
         messages = _build_messages(payload, _config())
 
-    assert len(messages) == 2
+    assert len(messages) == 1
     assert isinstance(messages[0], LogMessage)
     assert (
         messages[0].message
-        == "Approval granted: Edit C:\\workspace\\bear-base\\jikken\\src\\pages\\noise.astro"
-    )
-    assert isinstance(messages[1], LogMessage)
-    assert (
-        messages[1].message
         == "Completed Edit C:\\workspace\\bear-base\\jikken\\src\\pages\\noise.astro"
     )

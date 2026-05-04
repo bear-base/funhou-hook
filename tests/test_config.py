@@ -223,7 +223,7 @@ def test_load_env_reads_env_example() -> None:
     env = _load_env(Path(__file__).resolve().parents[1] / "config" / ".env.example")
 
     assert env["SLACK_WEBHOOK_URL"] == "https://hooks.slack.com/services/T000/B000/XXXX"
-    assert env["SLACK_MENTION_TO"] == "@you"
+    assert env["SLACK_MENTION_TO"] == "<@U01234567>"
 
 
 def test_load_env_prefers_os_env_over_env_file(monkeypatch: pytest.MonkeyPatch) -> None:
