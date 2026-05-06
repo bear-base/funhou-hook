@@ -4,8 +4,9 @@
 
 ## このドキュメントの位置づけ
 
-これは基本設計レベルの方針整理である。具体的な装飾の選定や実装計画は
-別途進める。基本設計が固まる前に詳細・実装計画に進まないこと。
+これは基本設計レベルの方針整理と、現時点で採用済みの Slack 表示仕様を
+記録するドキュメントである。今後の装飾追加や表示ルール変更は、基本設計
+の責務分離を壊さない範囲で段階的に行う。
 
 ## 背景
 
@@ -60,10 +61,11 @@ formatter は **意味判断に踏み込まない**。
 - AI による意味整形(コスト・レイテンシに見合わない)
 - Bash コマンドの構造解釈(`&&` 分解、ヒアドキュメント解釈)
 - コマンド名のホワイトリスト整形(コマンド同定が原理的に不確実)
-- 文字数 truncate(コマンド本体に効かせると意味喪失)
+- 意味理解を目的とした truncate(内容を分かりやすくするための要約)
 - パスやコマンドの内容に基づく分岐処理(意味判断に踏み込むため)
 
-これらが必要になったら、その時点で再設計する。
+Slack の表示制約に対応するための機械的な `target` 省略は、意味判断ではなく
+表示調整として扱う。省略ルールは後述の「検証済みの事実」に従う。
 
 ## 環境別フォーマッタ
 
@@ -101,6 +103,67 @@ formatter は **意味判断に踏み込まない**。
 現状の実装ではフィールドが十分に埋まっていない可能性がある。フィールド
 充実(hook → `LogMessage` の変換層の整備)は本ドキュメントのスコープ外
 だが、本フォーマッタを機能させる前提として **対応が必要**。
+
+## 実装反映
+
+### 現状の課題
+
+- Slack の `LogMessage` 表示で、長い `target` が inline code に入ると横に
+  伸び、通知として読みづらい。
+- `target` が長い場合、単純な三点リーダーだけでは省略されたことが分かり
+  にくい。
+- 承認待ちの `ApprovalMessage` で `command` 全文を表示すると、理由より
+  コマンド詳細が目立ち、承認判断のノイズになる。
+- `message` に `tool target` が含まれる場合、Slack 上で同じ対象が何度も
+  表示される。
+
+### 検証済みの事実
+
+- Slack formatter は [../src/funhou_hook/slack_formatter.py](../src/funhou_hook/slack_formatter.py)
+  に実装されている。
+- `LogMessage` の Slack 表示は、`level` アイコン、`tool`、`target`、補足
+  `message` の順で組み立てる。
+- `level` アイコンは以下を使う。
+  - `info`: `🔹`
+  - `warning`: `⚠️`
+  - `danger`: `⚡`
+  - `error`: `🚨`
+- 短い一行 `target` は inline code として表示する。
+- 複数行または省略後に改行を含む `target` は code block として表示する。
+- `target` が `TARGET_TRUNCATE_LIMIT` を超える場合は、全ツール共通で
+  `TARGET_TRUNCATE_HEAD` 文字、`（中略：N文字）`、`TARGET_TRUNCATE_TAIL`
+  文字の形に省略する。
+- `N` は `len(target) - TARGET_TRUNCATE_HEAD - TARGET_TRUNCATE_TAIL` で
+  算出する。バイト数や表示幅ではなく Python の文字数として扱う。
+- `message` が `Completed {tool} {target}` など、すでに表示済みの target を
+  含む既知の結果文の場合、Slack 補足では target 部分を繰り返さない。
+- `ApprovalMessage` は `command` 全文を表示せず、`理由` と `操作`(`tool`)
+  のみを表示する。
+- 現在の挙動は [../tests/test_slack_formatter.py](../tests/test_slack_formatter.py)
+  で固定されている。
+
+### 未検証の仮説
+
+- `TARGET_TRUNCATE_LIMIT = 160`、`TARGET_TRUNCATE_HEAD = 100`、
+  `TARGET_TRUNCATE_TAIL = 40` は初期値であり、実際の Slack 運用で適切かは
+  未検証である。
+- `（中略：N文字）` は、三点リーダーより省略箇所を認識しやすい想定だが、
+  長期利用で目立ちすぎないかは未検証である。
+- `ApprovalMessage` で `command` を出さない方針は通知の認知負荷を下げる
+  想定だが、承認判断に command 全文が必要なケースがどの程度あるかは
+  未検証である。
+
+### 修正方針
+
+- formatter は今後も意味判断を持たない。ツール種別、コマンド内容、JSON
+  構造に応じた分岐は追加しない。
+- 長い `target` の全文が必要な場合は、Slack 通知ではなく元ログを参照する
+  前提にする。
+- Slack 上で承認待ちの詳細が不足する場合でも、formatter で command を
+  解釈して短い対象を作らない。必要なら hook から `ApprovalMessage` を生成
+  する層で、構造化フィールドを追加する。
+- 表示の微調整は、`TARGET_TRUNCATE_LIMIT` / `TARGET_TRUNCATE_HEAD` /
+  `TARGET_TRUNCATE_TAIL` の定数変更とテスト更新で行う。
 
 ## 設計判断
 
