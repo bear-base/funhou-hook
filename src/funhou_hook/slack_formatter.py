@@ -12,6 +12,9 @@ LEVEL_ICONS: dict[Level, str] = {
     "danger": "⚡",
     "error": "🚨",
 }
+TARGET_TRUNCATE_LIMIT = 160
+TARGET_TRUNCATE_HEAD = 100
+TARGET_TRUNCATE_TAIL = 40
 
 
 def build_slack_payload(
@@ -53,9 +56,10 @@ def _build_log_payload(
 
 
 def _format_log_body(message: LogMessage) -> str:
-    if _is_multiline(message.target):
-        return f"*{message.tool}*\n```{message.target}```"
-    return f"*{message.tool}* `{message.target}`"
+    target = _truncate_target(message.target)
+    if _is_multiline(target):
+        return f"*{message.tool}*\n```{target}```"
+    return f"*{message.tool}* `{target}`"
 
 
 def _format_log_detail(message: LogMessage) -> str:
@@ -87,6 +91,17 @@ def _remove_repeated_target(message: str, default_message: str) -> str:
 
 def _is_multiline(value: str) -> bool:
     return "\n" in value or "\r" in value
+
+
+def _truncate_target(target: str) -> str:
+    if len(target) <= TARGET_TRUNCATE_LIMIT:
+        return target
+    omitted_count = len(target) - TARGET_TRUNCATE_HEAD - TARGET_TRUNCATE_TAIL
+    return (
+        f"{target[:TARGET_TRUNCATE_HEAD]}"
+        f"\n（中略：{omitted_count}文字）\n"
+        f"{target[-TARGET_TRUNCATE_TAIL:]}"
+    )
 
 
 def _build_summary_payload(message: SummaryMessage) -> dict:
@@ -125,7 +140,7 @@ def _build_approval_payload(
         mention_to=mention_to,
         mention_levels=mention_levels,
     )
-    text = f"{title}: {message.reason} ({message.tool} {message.command})"
+    text = f"{title}: {message.reason} (操作: {message.tool})"
     return {
         "text": text,
         "blocks": [
@@ -137,7 +152,7 @@ def _build_approval_payload(
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f"*理由:* {message.reason}\n*コマンド:* `{message.command}`",
+                    "text": f"*理由:* {message.reason}\n*操作:* `{message.tool}`",
                 },
             },
         ],
