@@ -3,7 +3,12 @@ from datetime import UTC, datetime
 import pytest
 
 from funhou_hook import ApprovalMessage, LogMessage, SummaryMessage
-from funhou_hook.slack_formatter import build_slack_payload
+from funhou_hook.slack_formatter import (
+    TARGET_TRUNCATE_HEAD,
+    TARGET_TRUNCATE_LIMIT,
+    TARGET_TRUNCATE_TAIL,
+    build_slack_payload,
+)
 
 
 def test_build_slack_payload_renders_log_message_as_single_line_text() -> None:
@@ -66,6 +71,48 @@ def test_build_slack_payload_does_not_repeat_target_in_log_detail() -> None:
     assert payload == {"text": "🔹 *Bash* `npm test` Completed"}
 
 
+def test_build_slack_payload_truncates_long_single_line_target() -> None:
+    target = "a" * (TARGET_TRUNCATE_LIMIT + 1)
+    message = LogMessage(
+        timestamp=datetime(2026, 4, 9, 10, 7, tzinfo=UTC),
+        level="warning",
+        tool="TodoWrite",
+        target=target,
+        message=f"TodoWrite {target}",
+    )
+
+    payload = build_slack_payload(message)
+
+    omitted_count = len(target) - TARGET_TRUNCATE_HEAD - TARGET_TRUNCATE_TAIL
+    expected_target = (
+        f"{target[:TARGET_TRUNCATE_HEAD]}"
+        f"\n（中略：{omitted_count}文字）\n"
+        f"{target[-TARGET_TRUNCATE_TAIL:]}"
+    )
+    assert payload == {"text": f"⚠️ *TodoWrite*\n```{expected_target}```"}
+
+
+def test_build_slack_payload_truncates_long_multiline_target_inside_code_block() -> None:
+    target = f"{'a' * TARGET_TRUNCATE_HEAD}\n{'b' * TARGET_TRUNCATE_LIMIT}"
+    message = LogMessage(
+        timestamp=datetime(2026, 4, 9, 10, 7, tzinfo=UTC),
+        level="warning",
+        tool="Bash",
+        target=target,
+        message=f"Bash {target}",
+    )
+
+    payload = build_slack_payload(message)
+
+    omitted_count = len(target) - TARGET_TRUNCATE_HEAD - TARGET_TRUNCATE_TAIL
+    expected_target = (
+        f"{target[:TARGET_TRUNCATE_HEAD]}"
+        f"\n（中略：{omitted_count}文字）\n"
+        f"{target[-TARGET_TRUNCATE_TAIL:]}"
+    )
+    assert payload == {"text": f"⚠️ *Bash*\n```{expected_target}```"}
+
+
 def test_build_slack_payload_renders_summary_message_as_blocks() -> None:
     message = SummaryMessage(
         timestamp=datetime(2026, 4, 9, 10, 15, tzinfo=UTC),
@@ -118,7 +165,7 @@ def test_build_slack_payload_renders_approval_message_with_mention_and_blocks() 
 
     assert payload["text"] == (
         "@you ⚡ 承認待ち: 本番DBへのマイグレーション実行 "
-        "(Bash npx prisma migrate deploy)"
+        "(操作: Bash)"
     )
     assert payload["blocks"] == [
         {
@@ -131,7 +178,7 @@ def test_build_slack_payload_renders_approval_message_with_mention_and_blocks() 
                 "type": "mrkdwn",
                 "text": (
                     "*理由:* 本番DBへのマイグレーション実行\n"
-                    "*コマンド:* `npx prisma migrate deploy`"
+                    "*操作:* `Bash`"
                 ),
             },
         },
@@ -201,7 +248,7 @@ def test_build_slack_payload_renders_approval_without_mention_when_not_requested
 
     assert payload["text"] == (
         "⚡ 承認待ち: 本番DBへのマイグレーション実行 "
-        "(Bash npx prisma migrate deploy)"
+        "(操作: Bash)"
     )
     assert payload["blocks"][0] == {
         "type": "section",
