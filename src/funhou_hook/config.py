@@ -20,11 +20,14 @@ PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = PACKAGE_ROOT / "config" / "funhou.toml"
 DEFAULT_ENV_PATH = PACKAGE_ROOT / "config" / ".env"
 DEFAULT_LOG_PATH = Path("/tmp/funhou.log")
+DEFAULT_SUMMARY_STATE_PATH = Path("/tmp/funhou-summary-state.json")
 DEFAULT_LEVELS = ("info", "warning", "danger", "error")
 DEFAULT_MENTION_LEVELS = ("warning", "danger")
 DEFAULT_MESSAGE_TYPES = ("log", "summary", "approval")
 SLACK_WEBHOOK_ENV = "SLACK_WEBHOOK_URL"
 SLACK_MENTION_TO_ENV = "SLACK_MENTION_TO"
+GEMINI_API_KEY_ENV = "GEMINI_API_KEY"
+DEFAULT_SUMMARY_MODEL = "gemini-2.0-flash"
 
 
 @dataclass(slots=True, frozen=True)
@@ -60,12 +63,26 @@ ChannelConfig = TerminalChannelConfig
 
 
 @dataclass(slots=True, frozen=True)
+class SummaryEngineConfig:
+    """Settings for optional LLM-backed summary generation."""
+
+    enabled: bool = False
+    provider: str = "gemini"
+    model: str = DEFAULT_SUMMARY_MODEL
+    state_path: Path = DEFAULT_SUMMARY_STATE_PATH
+    max_log_chars: int = 8000
+    timeout_sec: float = 10.0
+    api_key: str | None = None
+
+
+@dataclass(slots=True, frozen=True)
 class FunhouConfig:
     """Configuration derived from the TOML file."""
 
     rules: tuple[HardRule, ...]
     terminal: TerminalChannelConfig
     slack: SlackChannelConfig = SlackChannelConfig()
+    summary: SummaryEngineConfig = SummaryEngineConfig()
     default_level: Level = "warning"
 
 
@@ -130,6 +147,34 @@ def _load_slack_channel(data: dict[str, Any], env: Mapping[str, str]) -> SlackCh
     )
 
 
+def _load_summary_engine(data: dict[str, Any], env: Mapping[str, str]) -> SummaryEngineConfig:
+    enabled = bool(data.get("enabled", False))
+    provider = str(data.get("provider", "gemini")).strip() or "gemini"
+    if provider != "gemini":
+        raise ValueError(f"Unsupported summary provider: {provider}")
+
+    model = str(data.get("model", DEFAULT_SUMMARY_MODEL)).strip() or DEFAULT_SUMMARY_MODEL
+    state_path = Path(data.get("state_path", DEFAULT_SUMMARY_STATE_PATH))
+    max_log_chars = int(data.get("max_log_chars", 8000))
+    timeout_sec = float(data.get("timeout_sec", 10.0))
+    api_key = _coerce_optional_string(env.get(GEMINI_API_KEY_ENV))
+
+    if max_log_chars <= 0:
+        raise ValueError("summary.max_log_chars must be greater than 0.")
+    if timeout_sec <= 0:
+        raise ValueError("summary.timeout_sec must be greater than 0.")
+
+    return SummaryEngineConfig(
+        enabled=enabled,
+        provider=provider,
+        model=model,
+        state_path=state_path,
+        max_log_chars=max_log_chars,
+        timeout_sec=timeout_sec,
+        api_key=api_key,
+    )
+
+
 def load_config(path: Path | None = None) -> FunhouConfig:
     """Load the funhou configuration from TOML."""
 
@@ -145,12 +190,14 @@ def load_config(path: Path | None = None) -> FunhouConfig:
     channels = raw.get("channels", {})
     terminal = _load_channel(channels.get("terminal", {}))
     slack = _load_slack_channel(channels.get("slack", {}), env)
+    summary = _load_summary_engine(raw.get("summary", {}), env)
     default_level = _coerce_level(raw.get("defaults", {}).get("level", "warning"))
 
     return FunhouConfig(
         rules=rules,
         terminal=terminal,
         slack=slack,
+        summary=summary,
         default_level=default_level,
     )
 

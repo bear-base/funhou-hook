@@ -70,6 +70,7 @@ mention_on = ["danger", "error"]
     assert config.slack.message_types == ("approval", "summary")
     assert config.slack.mention_on == ("danger", "error")
     assert config.slack.mention_to == "@team"
+    assert config.summary.enabled is False
 
 
 def test_load_config_allows_disabled_slack_without_env_values(
@@ -217,6 +218,59 @@ mention_on = ["warning", "urgent"]
         load_config(config_path)
 
 
+def test_load_config_reads_summary_engine_values(
+    config_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = config_dir / "funhou.toml"
+    monkeypatch.setattr(
+        "funhou_hook.config._load_env",
+        lambda path: {"GEMINI_API_KEY": "gemini-key"},
+    )
+    config_path.write_text(
+        """
+[channels.terminal]
+output = "/tmp/funhou.log"
+
+[summary]
+enabled = true
+provider = "gemini"
+model = "gemini-2.0-flash"
+state_path = "/tmp/funhou-summary-state.json"
+max_log_chars = 4096
+timeout_sec = 3.5
+""".strip(),
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+
+    assert config.summary.enabled is True
+    assert config.summary.provider == "gemini"
+    assert config.summary.model == "gemini-2.0-flash"
+    assert config.summary.state_path == Path("/tmp/funhou-summary-state.json")
+    assert config.summary.max_log_chars == 4096
+    assert config.summary.timeout_sec == 3.5
+    assert config.summary.api_key == "gemini-key"
+
+
+def test_load_config_rejects_invalid_summary_provider(config_dir: Path) -> None:
+    config_path = config_dir / "funhou.toml"
+    config_path.write_text(
+        """
+[channels.terminal]
+output = "/tmp/funhou.log"
+
+[summary]
+provider = "unknown"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Unsupported summary provider: unknown"):
+        load_config(config_path)
+
+
 def test_load_env_reads_env_example() -> None:
     from funhou_hook.config import _load_env
 
@@ -224,6 +278,7 @@ def test_load_env_reads_env_example() -> None:
 
     assert env["SLACK_WEBHOOK_URL"] == "https://hooks.slack.com/services/T000/B000/XXXX"
     assert env["SLACK_MENTION_TO"] == "<@U01234567>"
+    assert env["GEMINI_API_KEY"] == "AIzaSyExampleKey"
 
 
 def test_load_env_prefers_os_env_over_env_file(monkeypatch: pytest.MonkeyPatch) -> None:

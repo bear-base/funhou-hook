@@ -12,8 +12,10 @@ from typing import Any
 from .classifier import ToolEvent, classify_event
 from .config import DEFAULT_CONFIG_PATH, load_config
 from .dispatcher import dispatch_message
+from .gemini_summary_client import GeminiSummaryClient
 from .logging import LogKind, get_logger, initialize_logging
-from .messages import ApprovalMessage, FunhouMessage, LogMessage, utc_now
+from .messages import ApprovalMessage, FunhouMessage, LogMessage, SummaryMessage, utc_now
+from .summary_engine import build_summary_message
 
 APPROVAL_STATE_PATH = Path("/tmp/funhou-approval-state.json")
 BROKEN_STATE_PATH = Path("/tmp/funhou-approval-state.json.broken")
@@ -116,7 +118,10 @@ def _build_messages(payload: dict[str, Any], config: Any) -> list[FunhouMessage]
     if event_name == "Notification":
         return _build_notification_messages(payload, config)
     elif event_name == "PermissionRequest":
-        return _handle_permission_request(payload)
+        return _handle_permission_request(payload, config)
+    elif event_name == "Stop":
+        summary = _build_summary_for_trigger(event_name, config)
+        return [summary] if summary is not None else []
     elif event_name == "PermissionDenied":
         return _build_permission_denied_messages(payload)
     elif event_name == "PostToolUse":
@@ -164,10 +169,14 @@ def _build_notification_messages(payload: dict[str, Any], config: Any) -> list[F
     ]
 
 
-def _handle_permission_request(payload: dict[str, Any]) -> list[FunhouMessage]:
+def _handle_permission_request(payload: dict[str, Any], config: Any) -> list[FunhouMessage]:
     event = _extract_tool_event(payload)
     session_id = str(payload.get("session_id") or "unknown")
     messages: list[FunhouMessage] = []
+
+    summary = _build_summary_for_trigger("PermissionRequest", config)
+    if summary is not None:
+        messages.append(summary)
 
     tool_use_id, fallback_key = _extract_correlation_keys(payload, event)
     save_key = tool_use_id or fallback_key
@@ -266,6 +275,11 @@ def _build_response(message: FunhouMessage) -> dict[str, str]:
             "level": message.level,
             "tool": message.tool,
             "target": message.command,
+        }
+    if isinstance(message, SummaryMessage):
+        return {
+            "type": message.type,
+            "target": message.trigger or "summary",
         }
     return {
         "level": message.level,
@@ -471,6 +485,25 @@ def _error_message(target: str, message: str) -> LogMessage:
         tool="Hook",
         target=target,
         message=message,
+    )
+
+
+def _build_summary_for_trigger(trigger: str, config: Any) -> SummaryMessage | None:
+    summary_config = getattr(config, "summary", None)
+    terminal_config = getattr(config, "terminal", None)
+    if summary_config is None or terminal_config is None or not summary_config.enabled:
+        return None
+
+    client = GeminiSummaryClient(
+        api_key=summary_config.api_key,
+        model=summary_config.model,
+        timeout=summary_config.timeout_sec,
+    )
+    return build_summary_message(
+        trigger=trigger,
+        terminal=terminal_config,
+        summary=summary_config,
+        client=client,
     )
 
 

@@ -103,6 +103,17 @@ Claude Code の hook 設定は `.claude/settings.json` に書きます。まだ�
         ]
       }
     ],
+    "Stop": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run python hook.py"
+          }
+        ]
+      }
+    ],
     "Notification": [
       {
         "matcher": "permission_prompt",
@@ -212,6 +223,20 @@ Windows の場合:
 printf '%s' '{"hook_event_name":"Notification","notification_type":"idle_prompt","title":"Waiting for input","message":"Claude is waiting for your input"}' | uv run python hook.py
 ```
 
+ターン終了サマリー (`Stop`):
+
+Windows の場合:
+
+```powershell
+'{"hook_event_name":"Stop","session_id":"demo-session"}' | uv run python hook.py
+```
+
+それ以外の場合:
+
+```bash
+printf '%s' '{"hook_event_name":"Stop","session_id":"demo-session"}' | uv run python hook.py
+```
+
 ### 2. Claude Code での確認
 
 1. `.claude/settings.json` を保存する
@@ -220,6 +245,7 @@ printf '%s' '{"hook_event_name":"Notification","notification_type":"idle_prompt"
 4. 承認が必要な操作を発生させて `Permission requested` が出ることを確認する
 5. 承認後に `Approval granted` と実行結果が出ることを確認する
 6. 入力待ちになったときに `idle_prompt` が出ることを確認する
+7. サマリーを使う場合は `.claude/settings.json` に `Stop` hook があり、`config/funhou.toml` の `[summary].enabled = true` と `config/.env` の `GEMINI_API_KEY` が設定されていることを確認する
 
 ## 設定ファイル
 

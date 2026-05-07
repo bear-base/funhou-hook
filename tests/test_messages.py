@@ -25,11 +25,13 @@ def test_summary_message_captures_checkpoint_fields() -> None:
         next="Run migration after approval.",
         log_count=12,
         duration_sec=720,
+        trigger="Stop",
     )
 
     assert message.type == "summary"
     assert message.log_count == 12
     assert message.duration_sec == 720
+    assert message.trigger == "Stop"
 
 
 def test_approval_message_defaults_to_waiting_for_a_response() -> None:
