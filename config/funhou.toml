@@ -33,4 +33,12 @@ levels = ["info", "warning", "danger", "error"]
 enabled = true
 levels = ["info", "warning", "danger", "error"]
 message_types = ["log", "summary", "approval"]
-mention_on = ["warning", "danger"]
+mention_on = []
+
+[summary]
+enabled = true
+provider = "gemini"
+model = "gemini-3.0-flash"
+state_path = "/tmp/funhou-summary-state.json"
+max_log_chars = 8000
+timeout_sec = 10.0

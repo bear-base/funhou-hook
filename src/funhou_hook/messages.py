@@ -37,6 +37,7 @@ class SummaryMessage:
     next: str
     log_count: int
     duration_sec: int
+    trigger: str | None = None
     type: MessageType = "summary"
 
 
