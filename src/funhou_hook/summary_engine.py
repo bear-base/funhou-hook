@@ -156,7 +156,11 @@ def parse_summary_output(raw: str) -> ParsedSummary | None:
     try:
         parsed = json.loads(text)
     except json.JSONDecodeError as exc:
-        raise SummaryGenerationError("Summary model returned invalid JSON.") from exc
+        raise SummaryGenerationError(
+            "Summary model returned invalid JSON "
+            f"(message={exc.msg!r}, line={exc.lineno}, col={exc.colno}, "
+            f"pos={exc.pos}, length={len(text)})."
+        ) from exc
 
     if not isinstance(parsed, dict):
         raise SummaryGenerationError("Summary model returned a non-object JSON value.")

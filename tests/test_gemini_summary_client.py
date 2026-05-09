@@ -66,9 +66,8 @@ def test_gemini_summary_client_posts_generate_content_request(
     assert payload["generationConfig"] == {
         "temperature": 0.2,
         "maxOutputTokens": 512,
-        "response_mime_type": "application/json",
+        "responseMimeType": "application/json",
     }
-
 
 def test_gemini_summary_client_requires_api_key() -> None:
     client = GeminiSummaryClient(api_key=None, model="gemini-2.0-flash", timeout=3.5)

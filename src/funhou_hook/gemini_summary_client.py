@@ -41,7 +41,7 @@ class GeminiSummaryClient:
             "generationConfig": {
                 "temperature": 0.2,
                 "maxOutputTokens": 512,
-                "response_mime_type": "application/json",
+                "responseMimeType": "application/json",
             },
         }
         response = _post_json(
@@ -98,7 +98,11 @@ def _extract_text(response: dict[str, Any]) -> str:
     if not isinstance(candidates, list) or not candidates:
         raise SummaryGenerationError("Gemini API returned no candidates.")
 
-    content = candidates[0].get("content")
+    candidate = candidates[0]
+    if not isinstance(candidate, dict):
+        raise SummaryGenerationError("Gemini API returned a non-object candidate.")
+
+    content = candidate.get("content")
     if not isinstance(content, dict):
         raise SummaryGenerationError("Gemini API returned a candidate without content.")
 
