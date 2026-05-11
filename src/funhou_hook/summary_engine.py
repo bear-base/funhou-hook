@@ -153,13 +153,13 @@ def _load_summary_offset(path: Path) -> int:
         return 0
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-    except OSError, json.JSONDecodeError:
+    except (OSError, json.JSONDecodeError):
         return 0
     if not isinstance(raw, dict):
         return 0
     try:
         return int(raw.get("offset", 0))
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return 0
 
 

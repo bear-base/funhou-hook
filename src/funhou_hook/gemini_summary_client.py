@@ -79,7 +79,11 @@ class GeminiSummaryClient:
 
 
 class GeminiSummaryProvider:
-    """Use-case level summary provider backed by Gemini."""
+    """Use-case level summary provider backed by Gemini.
+
+    When ``client`` is provided, the connection settings are ignored and the supplied
+    low-level client is used directly. This keeps tests and custom callers explicit.
+    """
 
     def __init__(
         self,
@@ -155,7 +159,7 @@ def _generate_with_retry(client: GeminiSummaryClient, prompt: str) -> str:
         except Exception as exc:
             if attempt == attempts - 1:
                 raise SummaryGenerationError("Summary generation failed.") from exc
-    return ""
+    raise AssertionError("unreachable")
 
 
 def _generate_content_url(endpoint: str, model: str, api_key: str) -> str:
