@@ -12,7 +12,7 @@ from typing import Any
 from .classifier import ToolEvent, classify_event
 from .config import DEFAULT_CONFIG_PATH, load_config
 from .dispatcher import dispatch_message
-from .gemini_summary_client import GeminiSummaryClient
+from .gemini_summary_client import GeminiSummaryProvider
 from .logging import LogKind, get_logger, initialize_logging
 from .messages import ApprovalMessage, FunhouMessage, LogMessage, SummaryMessage, utc_now
 from .summary_engine import build_summary_message
@@ -494,7 +494,7 @@ def _build_summary_for_trigger(trigger: str, config: Any) -> SummaryMessage | No
     if summary_config is None or terminal_config is None or not summary_config.enabled:
         return None
 
-    client = GeminiSummaryClient(
+    provider = GeminiSummaryProvider(
         api_key=summary_config.api_key,
         model=summary_config.model,
         timeout=summary_config.timeout_sec,
@@ -503,7 +503,7 @@ def _build_summary_for_trigger(trigger: str, config: Any) -> SummaryMessage | No
         trigger=trigger,
         terminal=terminal_config,
         summary=summary_config,
-        client=client,
+        provider=provider,
     )
 
 

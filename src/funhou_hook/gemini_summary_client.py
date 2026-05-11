@@ -3,19 +3,45 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
-from .summary_engine import SummaryGenerationError
+from .summary_engine import SummaryGenerationError, SummaryProviderResult, SummarySource
 
 DEFAULT_GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta"
 MAX_ERROR_BODY_CHARS = 200
+PROMPT_TEMPLATE = """\
+あなたはAIエージェントの作業分報を要約するアシスタントです。
+
+入力には直近ターンのログと、サマリー生成の発火元イベントが含まれます。
+人間が後追いで状況を把握し、必要なら次の判断をできるようにしてください。
+
+出力ルール:
+- 要約に値しない場合は空文字列だけを返す
+- 要約する場合は JSON オブジェクトだけを返す
+- JSON の形式は {{"message": "...", "next": "..."}} とする
+- message は1〜2文で、何をしたかと結果を具体的に書く
+- next は次に人間またはエージェントが取る行動を書く。不明なら空文字列にする
+- Markdown コードフェンスや前置きは返さない
+
+発火元イベント: {trigger}
+
+ログ:
+{logs}
+"""
+
+
+@dataclass(slots=True, frozen=True)
+class ParsedSummary:
+    message: str
+    next: str
 
 
 class GeminiSummaryClient:
-    """SummaryClient implementation backed by Gemini generateContent."""
+    """Low-level Gemini generateContent client for prepared prompts."""
 
     def __init__(
         self,
@@ -31,7 +57,7 @@ class GeminiSummaryClient:
         self.endpoint = endpoint.rstrip("/")
 
     def generate_summary(self, prompt: str) -> str:
-        """Generate a summary using the Gemini generateContent REST API."""
+        """Generate raw model output for a prepared summary prompt."""
 
         if not self.api_key:
             raise SummaryGenerationError("Gemini API key is not configured.")
@@ -50,6 +76,86 @@ class GeminiSummaryClient:
             timeout=self.timeout,
         )
         return _extract_text(response)
+
+
+class GeminiSummaryProvider:
+    """Use-case level summary provider backed by Gemini."""
+
+    def __init__(
+        self,
+        *,
+        api_key: str | None,
+        model: str,
+        timeout: float,
+        endpoint: str = DEFAULT_GEMINI_ENDPOINT,
+        client: GeminiSummaryClient | None = None,
+    ) -> None:
+        self.client = client or GeminiSummaryClient(
+            api_key=api_key,
+            model=model,
+            timeout=timeout,
+            endpoint=endpoint,
+        )
+
+    def generate_summary(self, source: SummarySource, *, trigger: str) -> SummaryProviderResult:
+        """Generate a summary result using the Gemini client."""
+
+        try:
+            raw = _generate_with_retry(
+                self.client, build_summary_prompt(source.text, trigger=trigger)
+            )
+            parsed = parse_summary_output(raw)
+        except SummaryGenerationError as exc:
+            return SummaryProviderResult.failed(reason=str(exc))
+
+        if parsed is None:
+            return SummaryProviderResult.skipped(reason="provider returned no summary")
+        return SummaryProviderResult.generated(message=parsed.message, next=parsed.next)
+
+
+def build_summary_prompt(logs: str, *, trigger: str) -> str:
+    """Build the prompt sent to Gemini for summary generation."""
+
+    return PROMPT_TEMPLATE.format(trigger=trigger, logs=logs)
+
+
+def parse_summary_output(raw: str) -> ParsedSummary | None:
+    """Parse model output into provider summary fields."""
+
+    text = raw.strip()
+    if not text:
+        return None
+    if text.startswith("```"):
+        text = _strip_code_fence(text)
+
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise SummaryGenerationError(
+            "Summary model returned invalid JSON "
+            f"(message={exc.msg!r}, line={exc.lineno}, col={exc.colno}, "
+            f"pos={exc.pos}, length={len(text)})."
+        ) from exc
+
+    if not isinstance(parsed, dict):
+        raise SummaryGenerationError("Summary model returned a non-object JSON value.")
+
+    message = str(parsed.get("message") or "").strip()
+    next_action = str(parsed.get("next") or "").strip()
+    if not message:
+        return None
+    return ParsedSummary(message=message, next=next_action)
+
+
+def _generate_with_retry(client: GeminiSummaryClient, prompt: str) -> str:
+    attempts = 2
+    for attempt in range(attempts):
+        try:
+            return client.generate_summary(prompt)
+        except Exception as exc:
+            if attempt == attempts - 1:
+                raise SummaryGenerationError("Summary generation failed.") from exc
+    return ""
 
 
 def _generate_content_url(endpoint: str, model: str, api_key: str) -> str:
@@ -122,3 +228,12 @@ def _decode_body(body: bytes) -> str:
 
 def _truncate_body(body: str) -> str:
     return body[:MAX_ERROR_BODY_CHARS]
+
+
+def _strip_code_fence(text: str) -> str:
+    lines = text.splitlines()
+    if lines and lines[0].startswith("```"):
+        lines = lines[1:]
+    if lines and lines[-1].startswith("```"):
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
