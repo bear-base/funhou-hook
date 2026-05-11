@@ -5,8 +5,13 @@ from urllib.request import Request
 
 import pytest
 
-from funhou_hook.gemini_summary_client import GeminiSummaryClient
-from funhou_hook.summary_engine import SummaryGenerationError
+from funhou_hook.gemini_summary_client import (
+    GeminiSummaryClient,
+    GeminiSummaryProvider,
+    build_summary_prompt,
+    parse_summary_output,
+)
+from funhou_hook.summary_engine import SummaryGenerationError, SummarySource
 
 
 class FakeResponse:
@@ -69,6 +74,7 @@ def test_gemini_summary_client_posts_generate_content_request(
         "responseMimeType": "application/json",
     }
 
+
 def test_gemini_summary_client_requires_api_key() -> None:
     client = GeminiSummaryClient(api_key=None, model="gemini-2.0-flash", timeout=3.5)
 
@@ -87,3 +93,86 @@ def test_gemini_summary_client_rejects_missing_text(
 
     with pytest.raises(SummaryGenerationError, match="no text"):
         client.generate_summary("prompt")
+
+
+def test_gemini_summary_provider_returns_generated_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prompts: list[str] = []
+
+    def fake_summary(prompt: str) -> str:
+        prompts.append(prompt)
+        return '{"message":"Tests passed.","next":"Run the manual Slack check."}'
+
+    client = GeminiSummaryClient(api_key="key-123", model="gemini-2.0-flash", timeout=3.5)
+    monkeypatch.setattr(client, "generate_summary", fake_summary)
+    provider = GeminiSummaryProvider(
+        api_key="key-123",
+        model="gemini-2.0-flash",
+        timeout=3.5,
+        client=client,
+    )
+
+    result = provider.generate_summary(
+        SummarySource(text="10:00 [INFO] Bash: tests passed", offset=42, log_count=1),
+        trigger="Stop",
+    )
+
+    assert result.status == "generated"
+    assert result.message == "Tests passed."
+    assert result.next == "Run the manual Slack check."
+    assert "発火元イベント: Stop" in prompts[0]
+    assert "tests passed" in prompts[0]
+
+
+def test_gemini_summary_provider_returns_skipped_for_empty_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = GeminiSummaryClient(api_key="key-123", model="gemini-2.0-flash", timeout=3.5)
+    monkeypatch.setattr(client, "generate_summary", lambda prompt: "")
+    provider = GeminiSummaryProvider(
+        api_key="key-123",
+        model="gemini-2.0-flash",
+        timeout=3.5,
+        client=client,
+    )
+
+    result = provider.generate_summary(
+        SummarySource(text="10:00 [INFO] Read: src/config.py", offset=42, log_count=1),
+        trigger="Stop",
+    )
+
+    assert result.status == "skipped"
+
+
+def test_gemini_summary_provider_returns_failed_for_invalid_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = GeminiSummaryClient(api_key="key-123", model="gemini-2.0-flash", timeout=3.5)
+    monkeypatch.setattr(client, "generate_summary", lambda prompt: "not-json")
+    provider = GeminiSummaryProvider(
+        api_key="key-123",
+        model="gemini-2.0-flash",
+        timeout=3.5,
+        client=client,
+    )
+
+    result = provider.generate_summary(
+        SummarySource(text="10:00 [WARN] Bash: npm run build", offset=42, log_count=1),
+        trigger="PermissionRequest",
+    )
+
+    assert result.status == "failed"
+    assert "invalid JSON" in str(result.reason)
+
+
+def test_parse_summary_output_rejects_invalid_json() -> None:
+    with pytest.raises(SummaryGenerationError):
+        parse_summary_output("not-json")
+
+
+def test_build_summary_prompt_contains_logs_and_trigger() -> None:
+    prompt = build_summary_prompt("10:00 [INFO] Read: Read src/config.py", trigger="Stop")
+
+    assert "発火元イベント: Stop" in prompt
+    assert "Read src/config.py" in prompt

@@ -12,25 +12,23 @@ import pytest
 from funhou_hook.config import SummaryEngineConfig, TerminalChannelConfig
 from funhou_hook.messages import SummaryMessage
 from funhou_hook.summary_engine import (
-    SummaryGenerationError,
+    SummaryProviderResult,
+    SummarySource,
     build_summary_message,
-    build_summary_prompt,
-    parse_summary_output,
     read_summary_source,
 )
 
 
-class FakeSummaryClient:
-    def __init__(self, *responses: str | Exception) -> None:
-        self.responses = list(responses)
-        self.prompts: list[str] = []
+class FakeSummaryProvider:
+    def __init__(self, response: SummaryProviderResult | Exception) -> None:
+        self.response = response
+        self.calls: list[tuple[SummarySource, str]] = []
 
-    def generate_summary(self, prompt: str) -> str:
-        self.prompts.append(prompt)
-        response = self.responses.pop(0)
-        if isinstance(response, Exception):
-            raise response
-        return response
+    def generate_summary(self, source: SummarySource, *, trigger: str) -> SummaryProviderResult:
+        self.calls.append((source, trigger))
+        if isinstance(self.response, Exception):
+            raise self.response
+        return self.response
 
 
 @pytest.fixture
@@ -83,15 +81,18 @@ def test_build_summary_message_returns_message_and_updates_offset(runtime_dir: P
     log_path = runtime_dir / "funhou.log"
     state_path = runtime_dir / "summary-state.json"
     log_path.write_text("10:02:00 [WARN] Bash: Bash npm run build\n", encoding="utf-8")
-    client = FakeSummaryClient(
-        '{"message":"Build command was prepared.","next":"Check the build result."}'
+    provider = FakeSummaryProvider(
+        SummaryProviderResult.generated(
+            message="Build command was prepared.",
+            next="Check the build result.",
+        )
     )
 
     message = build_summary_message(
         trigger="Stop",
         terminal=_terminal(log_path),
         summary=_summary_config(state_path),
-        client=client,
+        provider=provider,
         now=datetime(2026, 4, 9, 10, 15, tzinfo=UTC),
     )
 
@@ -100,56 +101,61 @@ def test_build_summary_message_returns_message_and_updates_offset(runtime_dir: P
     assert message.next == "Check the build result."
     assert message.log_count == 1
     assert message.trigger == "Stop"
-    assert "発火元イベント: Stop" in client.prompts[0]
+    assert provider.calls[0][1] == "Stop"
+    assert "npm run build" in provider.calls[0][0].text
     assert json.loads(state_path.read_text(encoding="utf-8"))["offset"] == log_path.stat().st_size
 
 
-def test_build_summary_message_skips_empty_model_output_and_advances_offset(
+def test_build_summary_message_skips_provider_skip_and_advances_offset(
     runtime_dir: Path,
 ) -> None:
     log_path = runtime_dir / "funhou.log"
     state_path = runtime_dir / "summary-state.json"
     log_path.write_text("10:02:00 [INFO] Read: Read src/config.py\n", encoding="utf-8")
-    client = FakeSummaryClient("")
+    provider = FakeSummaryProvider(SummaryProviderResult.skipped(reason="not meaningful"))
 
     message = build_summary_message(
         trigger="Stop",
         terminal=_terminal(log_path),
         summary=_summary_config(state_path),
-        client=client,
+        provider=provider,
     )
 
     assert message is None
     assert json.loads(state_path.read_text(encoding="utf-8"))["offset"] == log_path.stat().st_size
 
 
-def test_build_summary_message_retries_once_and_keeps_offset_on_failure(
+def test_build_summary_message_keeps_offset_on_provider_failure(
     runtime_dir: Path,
 ) -> None:
     log_path = runtime_dir / "funhou.log"
     state_path = runtime_dir / "summary-state.json"
     log_path.write_text("10:02:00 [WARN] Bash: Bash npm run build\n", encoding="utf-8")
-    client = FakeSummaryClient(RuntimeError("timeout"), RuntimeError("timeout"))
+    provider = FakeSummaryProvider(SummaryProviderResult.failed(reason="timeout"))
 
     message = build_summary_message(
         trigger="Stop",
         terminal=_terminal(log_path),
         summary=_summary_config(state_path),
-        client=client,
+        provider=provider,
     )
 
     assert message is None
-    assert len(client.prompts) == 2
     assert not state_path.exists()
 
 
-def test_parse_summary_output_rejects_invalid_json() -> None:
-    with pytest.raises(SummaryGenerationError):
-        parse_summary_output("not-json")
+def test_build_summary_message_keeps_offset_on_provider_exception(runtime_dir: Path) -> None:
+    log_path = runtime_dir / "funhou.log"
+    state_path = runtime_dir / "summary-state.json"
+    log_path.write_text("10:02:00 [WARN] Bash: Bash npm run build\n", encoding="utf-8")
+    provider = FakeSummaryProvider(RuntimeError("timeout"))
 
+    message = build_summary_message(
+        trigger="Stop",
+        terminal=_terminal(log_path),
+        summary=_summary_config(state_path),
+        provider=provider,
+    )
 
-def test_build_summary_prompt_contains_logs_and_trigger() -> None:
-    prompt = build_summary_prompt("10:00 [INFO] Read: Read src/config.py", trigger="Stop")
-
-    assert "発火元イベント: Stop" in prompt
-    assert "Read src/config.py" in prompt
+    assert message is None
+    assert not state_path.exists()
