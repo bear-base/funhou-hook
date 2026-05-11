@@ -22,6 +22,7 @@ def config_dir() -> Iterator[Path]:
 def clear_slack_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SLACK_WEBHOOK_URL", raising=False)
     monkeypatch.delenv("SLACK_MENTION_TO", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
 
 
 def test_load_config_reads_slack_values_from_env_loader(
@@ -239,6 +240,8 @@ model = "gemini-2.0-flash"
 state_path = "/tmp/funhou-summary-state.json"
 max_log_chars = 4096
 timeout_sec = 3.5
+max_output_tokens = 768
+thinking_budget = 0
 """.strip(),
         encoding="utf-8",
     )
@@ -251,7 +254,51 @@ timeout_sec = 3.5
     assert config.summary.state_path == Path("/tmp/funhou-summary-state.json")
     assert config.summary.max_log_chars == 4096
     assert config.summary.timeout_sec == 3.5
+    assert config.summary.max_output_tokens == 768
+    assert config.summary.thinking_budget == 0
     assert config.summary.api_key == "gemini-key"
+
+
+def test_load_config_reads_summary_generation_defaults(
+    config_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = config_dir / "funhou.toml"
+    monkeypatch.setattr("funhou_hook.config._load_env", lambda path: {})
+    config_path.write_text(
+        """
+[channels.terminal]
+output = "/tmp/funhou.log"
+
+[summary]
+enabled = true
+thinking_budget = 0
+""".strip(),
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+
+    assert config.summary.model == "gemini-2.5-flash-lite"
+    assert config.summary.max_output_tokens == 512
+    assert config.summary.thinking_budget == 0
+
+
+def test_load_config_rejects_invalid_summary_max_output_tokens(config_dir: Path) -> None:
+    config_path = config_dir / "funhou.toml"
+    config_path.write_text(
+        """
+[channels.terminal]
+output = "/tmp/funhou.log"
+
+[summary]
+max_output_tokens = 0
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="summary.max_output_tokens must be greater than 0."):
+        load_config(config_path)
 
 
 def test_load_config_rejects_invalid_summary_provider(config_dir: Path) -> None:

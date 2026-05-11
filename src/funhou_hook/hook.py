@@ -498,6 +498,8 @@ def _build_summary_for_trigger(trigger: str, config: Any) -> SummaryMessage | No
         api_key=summary_config.api_key,
         model=summary_config.model,
         timeout=summary_config.timeout_sec,
+        max_output_tokens=summary_config.max_output_tokens,
+        thinking_budget=summary_config.thinking_budget,
     )
     return build_summary_message(
         trigger=trigger,

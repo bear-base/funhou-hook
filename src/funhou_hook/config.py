@@ -27,7 +27,9 @@ DEFAULT_MESSAGE_TYPES = ("log", "summary", "approval")
 SLACK_WEBHOOK_ENV = "SLACK_WEBHOOK_URL"
 SLACK_MENTION_TO_ENV = "SLACK_MENTION_TO"
 GEMINI_API_KEY_ENV = "GEMINI_API_KEY"
-DEFAULT_SUMMARY_MODEL = "gemini-2.0-flash"
+DEFAULT_SUMMARY_MODEL = "gemini-2.5-flash-lite"
+DEFAULT_SUMMARY_MAX_OUTPUT_TOKENS = 512
+DEFAULT_SUMMARY_THINKING_BUDGET = 0
 
 
 @dataclass(slots=True, frozen=True)
@@ -72,6 +74,8 @@ class SummaryEngineConfig:
     state_path: Path = DEFAULT_SUMMARY_STATE_PATH
     max_log_chars: int = 8000
     timeout_sec: float = 10.0
+    max_output_tokens: int = DEFAULT_SUMMARY_MAX_OUTPUT_TOKENS
+    thinking_budget: int | None = DEFAULT_SUMMARY_THINKING_BUDGET
     api_key: str | None = None
 
 
@@ -111,6 +115,12 @@ def _coerce_optional_string(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _coerce_optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    return int(value)
 
 
 def _load_channel(data: dict[str, Any]) -> TerminalChannelConfig:
@@ -157,12 +167,18 @@ def _load_summary_engine(data: dict[str, Any], env: Mapping[str, str]) -> Summar
     state_path = Path(data.get("state_path", DEFAULT_SUMMARY_STATE_PATH))
     max_log_chars = int(data.get("max_log_chars", 8000))
     timeout_sec = float(data.get("timeout_sec", 10.0))
+    max_output_tokens = int(data.get("max_output_tokens", DEFAULT_SUMMARY_MAX_OUTPUT_TOKENS))
+    thinking_budget = _coerce_optional_int(
+        data.get("thinking_budget", DEFAULT_SUMMARY_THINKING_BUDGET)
+    )
     api_key = _coerce_optional_string(env.get(GEMINI_API_KEY_ENV))
 
     if max_log_chars <= 0:
         raise ValueError("summary.max_log_chars must be greater than 0.")
     if timeout_sec <= 0:
         raise ValueError("summary.timeout_sec must be greater than 0.")
+    if max_output_tokens <= 0:
+        raise ValueError("summary.max_output_tokens must be greater than 0.")
 
     return SummaryEngineConfig(
         enabled=enabled,
@@ -171,6 +187,8 @@ def _load_summary_engine(data: dict[str, Any], env: Mapping[str, str]) -> Summar
         state_path=state_path,
         max_log_chars=max_log_chars,
         timeout_sec=timeout_sec,
+        max_output_tokens=max_output_tokens,
+        thinking_budget=thinking_budget,
         api_key=api_key,
     )
 
