@@ -227,6 +227,8 @@ def test_gemini_summary_provider_does_not_retry_non_retryable_client_error(
     assert calls == 1
     assert result.status == "failed"
     assert "configuration" in str(result.reason)
+    assert result.error_kind == "configuration"
+    assert result.retryable is False
 
 
 def test_gemini_summary_provider_returns_generated_result(
@@ -298,6 +300,7 @@ def test_gemini_summary_provider_returns_failed_for_invalid_json(
 
     assert result.status == "failed"
     assert "invalid JSON" in str(result.reason)
+    assert result.error_kind == "output_validation"
 
 
 def test_parse_summary_output_rejects_invalid_json() -> None:

@@ -41,6 +41,9 @@ class SummaryProviderResult:
     message: str = ""
     next: str = ""
     reason: str | None = None
+    error_kind: str | None = None
+    retryable: bool = False
+    metadata: dict[str, object] | None = None
 
     @classmethod
     def generated(cls, *, message: str, next: str = "") -> SummaryProviderResult:
@@ -51,8 +54,21 @@ class SummaryProviderResult:
         return cls(status="skipped", reason=reason)
 
     @classmethod
-    def failed(cls, *, reason: str | None = None) -> SummaryProviderResult:
-        return cls(status="failed", reason=reason)
+    def failed(
+        cls,
+        *,
+        reason: str | None = None,
+        error_kind: str | None = None,
+        retryable: bool = False,
+        metadata: dict[str, object] | None = None,
+    ) -> SummaryProviderResult:
+        return cls(
+            status="failed",
+            reason=reason,
+            error_kind=error_kind,
+            retryable=retryable,
+            metadata=metadata,
+        )
 
 
 def build_summary_message(
@@ -80,8 +96,8 @@ def build_summary_message(
     try:
         result = provider.generate_summary(source, trigger=trigger)
     except Exception as exc:
-        get_logger(LogKind.Debug).warning(
-            "Summary generation skipped",
+        get_logger(LogKind.Operational).warning(
+            "Summary provider raised unexpectedly",
             extra={
                 "trigger": trigger,
                 "error_type": type(exc).__name__,
@@ -91,10 +107,7 @@ def build_summary_message(
         return None
 
     if result.status == "failed":
-        get_logger(LogKind.Debug).warning(
-            "Summary generation failed",
-            extra={"trigger": trigger, "reason": result.reason},
-        )
+        _log_summary_failure(trigger=trigger, result=result)
         return None
 
     if result.status == "skipped":
@@ -103,9 +116,9 @@ def build_summary_message(
 
     message = result.message.strip()
     if not message:
-        get_logger(LogKind.Debug).warning(
+        get_logger(LogKind.Operational).warning(
             "Summary provider returned generated result without message",
-            extra={"trigger": trigger},
+            extra={"trigger": trigger, "error_kind": "provider_contract"},
         )
         return None
 
@@ -119,6 +132,18 @@ def build_summary_message(
         duration_sec=0,
         trigger=trigger,
     )
+
+
+def _log_summary_failure(*, trigger: str, result: SummaryProviderResult) -> None:
+    extra: dict[str, object] = {
+        "trigger": trigger,
+        "reason": result.reason,
+        "error_kind": result.error_kind,
+        "retryable": result.retryable,
+    }
+    if result.metadata:
+        extra["metadata"] = result.metadata
+    get_logger(LogKind.Operational).warning("Summary generation failed", extra=extra)
 
 
 def read_summary_source(log_path: Path, state_path: Path, *, max_chars: int) -> SummarySource:

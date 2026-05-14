@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from funhou_hook.config import SummaryEngineConfig, TerminalChannelConfig
+from funhou_hook.logging import initialize_logging
 from funhou_hook.messages import SummaryMessage
 from funhou_hook.summary_engine import (
     SummaryProviderResult,
@@ -130,8 +131,17 @@ def test_build_summary_message_keeps_offset_on_provider_failure(
 ) -> None:
     log_path = runtime_dir / "funhou.log"
     state_path = runtime_dir / "summary-state.json"
+    operational_log_path = runtime_dir / "operational.log"
+    initialize_logging(operational_log_path)
     log_path.write_text("10:02:00 [WARN] Bash: Bash npm run build\n", encoding="utf-8")
-    provider = FakeSummaryProvider(SummaryProviderResult.failed(reason="timeout"))
+    provider = FakeSummaryProvider(
+        SummaryProviderResult.failed(
+            reason="MAX_TOKENS",
+            error_kind="generation_incomplete",
+            retryable=False,
+            metadata={"finish_reason": "MAX_TOKENS", "thoughtsTokenCount": 40},
+        )
+    )
 
     message = build_summary_message(
         trigger="Stop",
@@ -142,11 +152,18 @@ def test_build_summary_message_keeps_offset_on_provider_failure(
 
     assert message is None
     assert not state_path.exists()
+    operational_log = operational_log_path.read_text(encoding="utf-8")
+    assert "Summary generation failed" in operational_log
+    assert "generation_incomplete" in operational_log
+    assert "MAX_TOKENS" in operational_log
+    assert "thoughtsTokenCount" in operational_log
 
 
 def test_build_summary_message_keeps_offset_on_provider_exception(runtime_dir: Path) -> None:
     log_path = runtime_dir / "funhou.log"
     state_path = runtime_dir / "summary-state.json"
+    operational_log_path = runtime_dir / "operational.log"
+    initialize_logging(operational_log_path)
     log_path.write_text("10:02:00 [WARN] Bash: Bash npm run build\n", encoding="utf-8")
     provider = FakeSummaryProvider(RuntimeError("timeout"))
 
@@ -159,3 +176,6 @@ def test_build_summary_message_keeps_offset_on_provider_exception(runtime_dir: P
 
     assert message is None
     assert not state_path.exists()
+    operational_log = operational_log_path.read_text(encoding="utf-8")
+    assert "Summary provider raised unexpectedly" in operational_log
+    assert "RuntimeError" in operational_log
