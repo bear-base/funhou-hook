@@ -159,8 +159,19 @@ class GeminiSummaryProvider:
                 self.client, build_summary_prompt(source.text, trigger=trigger)
             )
             parsed = parse_summary_output(raw)
+        except GeminiSummaryError as exc:
+            return SummaryProviderResult.failed(
+                reason=str(exc),
+                error_kind=exc.kind,
+                retryable=exc.retryable,
+                metadata=exc.metadata,
+            )
         except SummaryGenerationError as exc:
-            return SummaryProviderResult.failed(reason=str(exc))
+            return SummaryProviderResult.failed(
+                reason=str(exc),
+                error_kind="summary_generation",
+                retryable=False,
+            )
 
         if parsed is None:
             return SummaryProviderResult.skipped(reason="provider returned no summary")
