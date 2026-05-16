@@ -148,6 +148,34 @@ def test_build_slack_payload_renders_summary_message_as_blocks() -> None:
     ]
 
 
+def test_build_slack_payload_adds_spaces_around_summary_inline_code_for_slack() -> None:
+    message = SummaryMessage(
+        timestamp=datetime(2026, 4, 9, 10, 15, tzinfo=UTC),
+        message=(
+            "Gitコマンドで`master`ブランチを確認し、"
+            "`GeminiSummaryError`クラスを特定しました。"
+        ),
+        next="`main`ブランチを指定して再実行する",
+        log_count=3,
+        duration_sec=60,
+    )
+
+    payload = build_slack_payload(message)
+
+    expected_message = (
+        "Gitコマンドで `master` ブランチを確認し、"
+        " `GeminiSummaryError` クラスを特定しました。"
+    )
+    expected_next = "`main` ブランチを指定して再実行する"
+    assert payload["text"] == (
+        "📋 10:14-10:15 まとめ\n"
+        f"{expected_message}\n"
+        f"次: {expected_next}"
+    )
+    assert payload["blocks"][1]["text"]["text"] == expected_message
+    assert payload["blocks"][2]["text"]["text"] == f"次: {expected_next}"
+
+
 def test_build_slack_payload_renders_approval_message_with_mention_and_blocks() -> None:
     message = ApprovalMessage(
         timestamp=datetime(2026, 4, 9, 10, 16, tzinfo=UTC),
