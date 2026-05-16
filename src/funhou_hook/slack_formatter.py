@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import timedelta
 
 from .messages import ApprovalMessage, FunhouMessage, Level, LogMessage, SummaryMessage
@@ -15,6 +16,8 @@ LEVEL_ICONS: dict[Level, str] = {
 TARGET_TRUNCATE_LIMIT = 160
 TARGET_TRUNCATE_HEAD = 100
 TARGET_TRUNCATE_TAIL = 40
+CODE_SPAN_ADJACENT_LEFT = re.compile(r"(?<=\S)(`+[^`\n]+`+)")
+CODE_SPAN_ADJACENT_RIGHT = re.compile(r"(`+[^`\n]+`+)(?=[A-Za-z0-9\u3040-\u30ff\u3400-\u9fff])")
 
 
 def build_slack_payload(
@@ -108,7 +111,9 @@ def _build_summary_payload(message: SummaryMessage) -> dict:
     start_time = _format_summary_start(message)
     end_time = message.timestamp.strftime("%H:%M")
     title = f"📋 {start_time}-{end_time} まとめ"
-    text = f"{title}\n{message.message}\n次: {message.next}"
+    summary_text = _normalize_slack_summary_text(message.message)
+    next_text = _normalize_slack_summary_text(message.next)
+    text = f"{title}\n{summary_text}\n次: {next_text}"
     return {
         "text": text,
         "blocks": [
@@ -118,11 +123,11 @@ def _build_summary_payload(message: SummaryMessage) -> dict:
             },
             {
                 "type": "section",
-                "text": {"type": "mrkdwn", "text": message.message},
+                "text": {"type": "mrkdwn", "text": summary_text},
             },
             {
                 "type": "section",
-                "text": {"type": "mrkdwn", "text": f"次: {message.next}"},
+                "text": {"type": "mrkdwn", "text": f"次: {next_text}"},
             },
         ],
     }
@@ -180,3 +185,10 @@ def _format_approval_heading(title: str) -> str:
 def _format_summary_start(message: SummaryMessage) -> str:
     start = message.timestamp - timedelta(seconds=message.duration_sec)
     return start.strftime("%H:%M")
+
+
+def _normalize_slack_summary_text(text: str) -> str:
+    """Add spaces outside inline code spans for Slack mrkdwn CJK rendering."""
+
+    with_left_space = CODE_SPAN_ADJACENT_LEFT.sub(r" \1", text.strip())
+    return CODE_SPAN_ADJACENT_RIGHT.sub(r"\1 ", with_left_space)
