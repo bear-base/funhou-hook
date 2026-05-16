@@ -30,6 +30,7 @@ GEMINI_API_KEY_ENV = "GEMINI_API_KEY"
 DEFAULT_SUMMARY_MODEL = "gemini-2.5-flash-lite"
 DEFAULT_SUMMARY_MAX_OUTPUT_TOKENS = 512
 DEFAULT_SUMMARY_THINKING_BUDGET = 0
+DEFAULT_SUMMARY_TRIGGERS = ("Stop",)
 
 
 @dataclass(slots=True, frozen=True)
@@ -71,6 +72,7 @@ class SummaryEngineConfig:
     enabled: bool = False
     provider: str = "gemini"
     model: str = DEFAULT_SUMMARY_MODEL
+    triggers: tuple[str, ...] = DEFAULT_SUMMARY_TRIGGERS
     state_path: Path = DEFAULT_SUMMARY_STATE_PATH
     max_log_chars: int = 8000
     timeout_sec: float = 10.0
@@ -164,6 +166,10 @@ def _load_summary_engine(data: dict[str, Any], env: Mapping[str, str]) -> Summar
         raise ValueError(f"Unsupported summary provider: {provider}")
 
     model = str(data.get("model", DEFAULT_SUMMARY_MODEL)).strip() or DEFAULT_SUMMARY_MODEL
+    raw_triggers = data.get("triggers", list(DEFAULT_SUMMARY_TRIGGERS))
+    if not isinstance(raw_triggers, (list, tuple)):
+        raise ValueError("summary.triggers must be a list of hook event names.")
+    triggers = tuple(str(value).strip() for value in raw_triggers)
     state_path = Path(data.get("state_path", DEFAULT_SUMMARY_STATE_PATH))
     max_log_chars = int(data.get("max_log_chars", 8000))
     timeout_sec = float(data.get("timeout_sec", 10.0))
@@ -179,11 +185,14 @@ def _load_summary_engine(data: dict[str, Any], env: Mapping[str, str]) -> Summar
         raise ValueError("summary.timeout_sec must be greater than 0.")
     if max_output_tokens <= 0:
         raise ValueError("summary.max_output_tokens must be greater than 0.")
+    if any(not trigger for trigger in triggers):
+        raise ValueError("summary.triggers must not contain empty values.")
 
     return SummaryEngineConfig(
         enabled=enabled,
         provider=provider,
         model=model,
+        triggers=triggers,
         state_path=state_path,
         max_log_chars=max_log_chars,
         timeout_sec=timeout_sec,

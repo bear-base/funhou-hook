@@ -237,6 +237,7 @@ output = "/tmp/funhou.log"
 enabled = true
 provider = "gemini"
 model = "gemini-2.0-flash"
+triggers = ["Stop", "PermissionRequest"]
 state_path = "/tmp/funhou-summary-state.json"
 max_log_chars = 4096
 timeout_sec = 3.5
@@ -251,6 +252,7 @@ thinking_budget = 0
     assert config.summary.enabled is True
     assert config.summary.provider == "gemini"
     assert config.summary.model == "gemini-2.0-flash"
+    assert config.summary.triggers == ("Stop", "PermissionRequest")
     assert config.summary.state_path == Path("/tmp/funhou-summary-state.json")
     assert config.summary.max_log_chars == 4096
     assert config.summary.timeout_sec == 3.5
@@ -280,6 +282,7 @@ thinking_budget = 0
     config = load_config(config_path)
 
     assert config.summary.model == "gemini-2.5-flash-lite"
+    assert config.summary.triggers == ("Stop",)
     assert config.summary.max_output_tokens == 512
     assert config.summary.thinking_budget == 0
 
@@ -315,6 +318,40 @@ provider = "unknown"
     )
 
     with pytest.raises(ValueError, match="Unsupported summary provider: unknown"):
+        load_config(config_path)
+
+
+def test_load_config_rejects_empty_summary_trigger(config_dir: Path) -> None:
+    config_path = config_dir / "funhou.toml"
+    config_path.write_text(
+        """
+[channels.terminal]
+output = "/tmp/funhou.log"
+
+[summary]
+triggers = ["Stop", ""]
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="summary.triggers must not contain empty values."):
+        load_config(config_path)
+
+
+def test_load_config_rejects_non_list_summary_triggers(config_dir: Path) -> None:
+    config_path = config_dir / "funhou.toml"
+    config_path.write_text(
+        """
+[channels.terminal]
+output = "/tmp/funhou.log"
+
+[summary]
+triggers = "Stop"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="summary.triggers must be a list of hook event names."):
         load_config(config_path)
 
 
