@@ -8,14 +8,14 @@ from funhou_hook.hook import _build_messages, _build_response
 from funhou_hook.messages import ApprovalMessage, SummaryMessage
 
 
-def _config() -> FunhouConfig:
+def _config(*, summary_triggers: tuple[str, ...] = ("Stop",)) -> FunhouConfig:
     return FunhouConfig(
         rules=(),
         terminal=ChannelConfig(
             output=Path("/tmp/test-funhou.log"),
             levels=("info", "warning", "danger", "error"),
         ),
-        summary=SummaryEngineConfig(enabled=True),
+        summary=SummaryEngineConfig(enabled=True, triggers=summary_triggers),
         default_level="warning",
     )
 
@@ -39,7 +39,32 @@ def test_stop_event_generates_summary_message(monkeypatch) -> None:
     assert messages == [_summary("Stop", _config())]
 
 
-def test_permission_request_generates_summary_before_approval(monkeypatch) -> None:
+def test_permission_request_skips_summary_by_default(monkeypatch) -> None:
+    saved: list[tuple[str, str, str]] = []
+    monkeypatch.setattr(
+        "funhou_hook.hook._put_pending_approval",
+        lambda key, mode, session_id, event: saved.append((key, mode, session_id)),
+    )
+    payload = {
+        "hook_event_name": "PermissionRequest",
+        "tool_name": "Bash",
+        "tool_input": {
+            "command": "npx prisma migrate deploy",
+            "description": "production migration",
+        },
+        "session_id": "demo-session",
+        "tool_use_id": "toolu_123",
+    }
+
+    messages = _build_messages(payload, _config())
+
+    assert len(messages) == 1
+    assert isinstance(messages[0], ApprovalMessage)
+    assert messages[0].reason == "production migration"
+    assert saved == [("toolu_123", "tool_use_id", "demo-session")]
+
+
+def test_permission_request_generates_summary_when_trigger_is_enabled(monkeypatch) -> None:
     saved: list[tuple[str, str, str]] = []
     monkeypatch.setattr("funhou_hook.hook._build_summary_for_trigger", _summary)
     monkeypatch.setattr(
@@ -57,7 +82,10 @@ def test_permission_request_generates_summary_before_approval(monkeypatch) -> No
         "tool_use_id": "toolu_123",
     }
 
-    messages = _build_messages(payload, _config())
+    messages = _build_messages(
+        payload,
+        _config(summary_triggers=("Stop", "PermissionRequest")),
+    )
 
     assert isinstance(messages[0], SummaryMessage)
     assert messages[0].trigger == "PermissionRequest"

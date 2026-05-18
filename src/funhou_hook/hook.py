@@ -493,6 +493,8 @@ def _build_summary_for_trigger(trigger: str, config: Any) -> SummaryMessage | No
     terminal_config = getattr(config, "terminal", None)
     if summary_config is None or terminal_config is None or not summary_config.enabled:
         return None
+    if trigger not in summary_config.triggers:
+        return None
 
     provider = GeminiSummaryProvider(
         api_key=summary_config.api_key,
