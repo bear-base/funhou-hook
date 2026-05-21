@@ -8,7 +8,7 @@
 ## 他ドキュメントとの分担
 
 - [design.md](./design.md): `summary` を含む統一メッセージ型と hook event の写像
-- [llm-integration.md](./llm-integration.md): LLM provider、モデル選定、API エラー分類
+- [summary-provider.md](./summary-provider.md): provider 境界と生成結果分類の設計思想
 - [logging.md](./logging.md): summary 生成失敗時の Operational Log 方針
 
 ## 目的

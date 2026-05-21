@@ -3,9 +3,9 @@
 `docs/design.md` は、Claude Code の hook イベントを `log` / `summary` / `approval`
 の統一メッセージ型へどう写像するかをまとめる設計入口です。
 
-詳細な summary 生成方針は [summary-engine.md](./summary-engine.md)、LLM 連携方針は
-[llm-integration.md](./llm-integration.md)、ログ種別の方針は [logging.md](./logging.md)
-に分けます。
+詳細な summary 生成方針は [summary-engine.md](./summary-engine.md)、provider 境界の
+設計思想は [summary-provider.md](./summary-provider.md)、ログ種別の方針は
+[logging.md](./logging.md) に分けます。
 
 ## 現時点の要約
 
@@ -185,7 +185,7 @@ Slack の表示調整は Slack formatter の責務であり、コアのメッセ
 サマリーはベストエフォート機能であり、生成に失敗しても hook 全体を失敗させない。
 
 分報不要と判断された場合は正常スキップとして扱い、生成失敗とは区別する。失敗時
-のログ記録、リトライ、offset 更新の詳細は summary / LLM 連携側の設計に委ねる。
+のログ記録、リトライ、offset 更新の詳細は summary / provider 側の設計に委ねる。
 
 ## 現時点の制約
 
