@@ -1,29 +1,39 @@
 # funhou-hook
 
-`funhou-hook` は、Claude Code の hook からツール実行や停止通知を受け取り、危険度付きの 1 行ログとして `/tmp/funhou.log` に流すための最小プロトタイプです。
+`funhou-hook` は、Claude Code の hook イベントを作業分報向けの `log` / `approval` / `summary` メッセージに整形し、terminal log や Slack に流すための hook adapter です。
 
-Phase 1 では次の流れが動く状態を目指しています。
-
-1. Claude Code の hook として `hook.py` が呼ばれる
-2. stdin の JSON からツール実行・承認待ち・入力待ち・承認結果を取り出す
-3. `config/funhou.toml` の hard rules と基本設計に基づいてメッセージ型を決める
-4. 1 行ログに整形する
-5. `/tmp/funhou.log` に追記する
-6. ログを見ると、作業中だけでなく承認待ちや入力待ち、その結果も追える
+Claude Code の作業中に起きるツール実行、承認待ち、入力待ち、作業区切りを見える形で残すことを目的にしています。
 
 設計の背景は [docs/design.md](docs/design.md) にあります。
+
+## 主な機能
+
+- ツール実行を作業ログとして記録する
+- 承認待ち・承認結果を通知する
+- 入力待ち通知を記録する
+- 作業区切りでサマリーを生成する
+- terminal log と Slack に配送する
+
+## 全体の流れ
+
+1. Claude Code が hook イベントを発火する
+2. `hook.py` が stdin の JSON payload を受け取る
+3. payload を `log` / `approval` / `summary` に変換する
+4. `config/funhou.toml` の設定に従って terminal log や Slack に配送する
 
 ## 前提
 
 - Python 3.14 系
 - `uv`
 - Claude Code が使えること
+- Slack に通知する場合は Slack Incoming Webhook URL
+- サマリーを生成する場合は Gemini API key
 
 このリポジトリでは Python の依存管理を `uv`、lint/format を `ruff`、テストを `pytest` に統一しています。
 
-## インストール
+## セットアップ
 
-最初にリポジトリ直下で依存を同期します。
+リポジトリ直下で依存を同期します。
 
 Windows の場合:
 
@@ -43,7 +53,7 @@ uv sync --dev
 
 Claude Code の hook 設定は `.claude/settings.json` に書きます。まだファイルが無ければ作成してください。
 
-最小構成の例:
+設定例:
 
 ```json
 {
@@ -138,6 +148,33 @@ Claude Code の hook 設定は `.claude/settings.json` に書きます。まだ�
 }
 ```
 
+## 設定
+
+基本設定は `config/funhou.toml` に書きます。
+
+- `[[rules]]`: ツールや対象パスに応じた通知レベルのルール
+- `[channels.terminal]`: terminal log の出力先と配送対象
+- `[channels.slack]`: Slack 通知の有効化、配送対象、メンション設定
+- `[summary]`: サマリー生成の有効化、モデル、生成タイミングなど
+
+シークレットは `config/.env` に書きます。
+
+```dotenv
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
+SLACK_MENTION_TO=<@U01234567>
+GEMINI_API_KEY=...
+```
+
+Slack を使う場合は `SLACK_WEBHOOK_URL` を設定します。サマリーを使う場合は `GEMINI_API_KEY` を設定し、`config/funhou.toml` の `[summary].enabled` を `true` にします。
+
+サマリーはデフォルトでは `Stop` hook で生成されます。承認待ちのたびにもサマリーを出したい場合は、`summary.triggers` に `PermissionRequest` を追加します。
+
+```toml
+[summary]
+enabled = true
+triggers = ["Stop", "PermissionRequest"]
+```
+
 ## ログの見方
 
 Windows の場合:
@@ -161,11 +198,10 @@ tail -f /tmp/funhou.log
 10:03:20 [INFO] Bash: Completed Bash git status
 10:03:31 [WARN] Notification: Waiting for input: Claude is waiting for your input
 10:03:45 [DANG] Bash: Approval denied: Bash git push origin main (Auto mode denied: command targets a path outside the project)
+10:04:10 [SUMMARY] Git の状態確認と設定ファイルの確認を行いました。 | next=README の更新内容を確認する
 ```
 
 ## 動作確認
-
-### 1. `hook.py` 単体確認
 
 通常の `PreToolUse`:
 
@@ -195,34 +231,6 @@ Windows の場合:
 printf '%s' '{"hook_event_name":"PermissionRequest","tool_name":"Bash","session_id":"demo-session","tool_input":{"command":"git status","description":"Check repository status"}}' | uv run python hook.py
 ```
 
-承認済み (`PostToolUse`):
-
-Windows の場合:
-
-```powershell
-'{"hook_event_name":"PostToolUse","tool_name":"Bash","session_id":"demo-session","tool_input":{"command":"git status"}}' | uv run python hook.py
-```
-
-それ以外の場合:
-
-```bash
-printf '%s' '{"hook_event_name":"PostToolUse","tool_name":"Bash","session_id":"demo-session","tool_input":{"command":"git status"}}' | uv run python hook.py
-```
-
-入力待ち (`idle_prompt`):
-
-Windows の場合:
-
-```powershell
-'{"hook_event_name":"Notification","notification_type":"idle_prompt","title":"Waiting for input","message":"Claude is waiting for your input"}' | uv run python hook.py
-```
-
-それ以外の場合:
-
-```bash
-printf '%s' '{"hook_event_name":"Notification","notification_type":"idle_prompt","title":"Waiting for input","message":"Claude is waiting for your input"}' | uv run python hook.py
-```
-
 ターン終了サマリー (`Stop`):
 
 Windows の場合:
@@ -236,35 +244,3 @@ Windows の場合:
 ```bash
 printf '%s' '{"hook_event_name":"Stop","session_id":"demo-session"}' | uv run python hook.py
 ```
-
-### 2. Claude Code での確認
-
-1. `.claude/settings.json` を保存する
-2. 別ターミナルで `/tmp/funhou.log` を監視する
-3. Claude Code で通常の読取操作を実行して作業ログが流れることを確認する
-4. 承認が必要な操作を発生させて `Permission requested` が出ることを確認する
-5. 承認後に `Approval granted` と実行結果が出ることを確認する
-6. 入力待ちになったときに `idle_prompt` が出ることを確認する
-7. サマリーを使う場合は `.claude/settings.json` に `Stop` hook があり、`config/funhou.toml` の `[summary].enabled = true` と `config/.env` の `GEMINI_API_KEY` が設定されていることを確認する
-
-## 設定ファイル
-
-```text
-hook.py                         Claude Code から直接呼ぶ入口
-config/funhou.toml              hard rules とログ出力先
-src/funhou_hook/hook.py         stdin JSON の読込とイベント解釈
-src/funhou_hook/classifier.py   危険度判定
-src/funhou_hook/formatter.py    1 行ログ整形
-src/funhou_hook/dispatcher.py   /tmp/funhou.log への追記
-src/funhou_hook/messages.py     log / summary / approval の型
-```
-
-## いま入っていないもの
-
-- AI スクリーニング
-- サマリー生成
-- Slack 連携
-- 承認フロー本体
-- Codex 対応実装
-
-Codex 対応の検討メモは [docs/features/codex-support.md](docs/features/codex-support.md) にあります。
